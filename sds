@@ -2950,37 +2950,36 @@ local function fireCombo()
         end
     end
 
-   local dashFaceActive = true
 local qHasFired = false
-local forceTurnConn
 
-forceTurnConn = RunService.Heartbeat:Connect(function()
-    if not dashFaceActive then
-        forceTurnConn:Disconnect()
+-- step 1: hold movement for 0.05 seconds
+if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
+local moveHoldConn
+local moveHoldStart = tick()
+moveHoldConn = RunService.Heartbeat:Connect(function()
+    if tick() - moveHoldStart >= 0.05 then
+        moveHoldConn:Disconnect()
         return
     end
-    local mr = getMyRootPart()
-    local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-    local tp = target and getTargetPosition(target)
-    if not mr or not tr or not tp then forceTurnConn:Disconnect(); return end
+    if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
+end)
 
-    local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
-    if toMe.Magnitude > 0.01 then
-        local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
-        if theirFwd:Dot(toMe.Unit) < BACK_DOT then
-            dashFaceActive        = false
-            State.AnglePredActive  = false
-            State.AnglePredEndTime = 0
-            State.comboDashLock    = false
-            forceTurnConn:Disconnect()
-            return
-        end
-    end
+-- step 2: tap dash just before 0.05 ends
+task.delay(0.045, function()
+    tapBtn(dashBtn)
+    qHasFired = true
+end)
 
-    if not qHasFired then
-        local toTgt = Vector3.new(tp.X - mr.Position.X, 0, tp.Z - mr.Position.Z)
-        if toTgt.Magnitude < 0.01 then return end
-        toTgt = toTgt.Unit
+-- step 3: stop movement and turn at exactly 0.05 seconds
+task.delay(0.051, function()
+    flushAllKeys()
+    local hum2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum2 then hum2:Move(Vector3.new(0,0,0), false) end
+
+    local mr2 = getMyRootPart()
+    local tp2 = target and getTargetPosition(target)
+    if mr2 and tp2 then
+        local toTgt = Vector3.new(tp2.X - mr2.Position.X, 0, tp2.Z - mr2.Position.Z).Unit
         local angleDeg = (sideKey == Enum.KeyCode.A) and 80 or -80
         local rad = math.rad(angleDeg)
         local dashDir = Vector3.new(
@@ -2988,31 +2987,8 @@ forceTurnConn = RunService.Heartbeat:Connect(function()
             0,
             toTgt.X * math.sin(rad) + toTgt.Z * math.cos(rad)
         ).Unit
-        mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
-        -- force it twice per frame to win the fight
-        RunService.Heartbeat:Wait()
-        mr = getMyRootPart()
-        if mr then mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir) end
+        mr2.CFrame = CFrame.new(mr2.Position, mr2.Position + dashDir)
     end
-end)
-
-    RunService.Heartbeat:Wait()
-flushAllKeys()
-local moveStart = tick()
-local dashFired = false
-local moveConn
-moveConn = RunService.Heartbeat:Connect(function()
-    local elapsed = tick() - moveStart
-    if not dashFired and elapsed >= (0.001 - 0.0001) then
-        dashFired = true
-        tapBtn(dashBtn)
-    end
-    if elapsed >= 0.001 then
-        moveConn:Disconnect()
-        flushAllKeys()
-        return
-    end
-    if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
 end)
 
     task.spawn(function()
@@ -3091,7 +3067,7 @@ end)
 
     task.spawn(function()
         task.wait(0.20)
-        dashFaceActive = false
+        
         task.delay(0.15, function()
             State.comboDashLock    = false
             State.AnglePredActive  = false
@@ -3264,15 +3240,9 @@ local function fireComboChain()
    RunService.Heartbeat:Wait()
 flushAllKeys()
 local moveStart = tick()
-local dashFired = false
 local moveConn
-moveConn = RunService.Heartbeat:Connect(function()
-    local elapsed = tick() - moveStart
-    if not dashFired and elapsed >= (0.001 - 0.0001) then
-        dashFired = true
-        tapBtn(dashBtn)
-    end
-    if elapsed >= 0.001 then
+moveConn = RunService.RenderStepped:Connect(function()
+    if tick() - moveStart >= 0.1 then
         moveConn:Disconnect()
         flushAllKeys()
         return
