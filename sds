@@ -2951,37 +2951,36 @@ local function fireCombo()
     end
 
 
-
 local qHasFired = false
 
--- one shot rotation test
+-- step 1: move in dash direction
+if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
+
+-- step 2: tap dash immediately
+tapBtn(dashBtn)
+qHasFired = true
+
+-- step 3: stop movement
+task.wait(0.02)
+flushAllKeys()
+local hum2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if hum2 then hum2:Move(Vector3.new(0,0,0), false) end
+
+-- step 4: turn character to 80/-80 degrees toward target
+task.wait(0.05)
 local mr2 = getMyRootPart()
-local tp2 = getTargetPosition(State.Target)
+local tp2 = target and getTargetPosition(target)
 if mr2 and tp2 then
     local toTgt = Vector3.new(tp2.X - mr2.Position.X, 0, tp2.Z - mr2.Position.Z).Unit
     local angleDeg = (sideKey == Enum.KeyCode.A) and 80 or -80
     local rad = math.rad(angleDeg)
-    local dashDir2 = Vector3.new(
+    local dashDir = Vector3.new(
         toTgt.X * math.cos(rad) - toTgt.Z * math.sin(rad),
         0,
         toTgt.X * math.sin(rad) + toTgt.Z * math.cos(rad)
     ).Unit
-    mr2.CFrame = CFrame.new(mr2.Position, mr2.Position + dashDir2)
+    mr2.CFrame = CFrame.new(mr2.Position, mr2.Position + dashDir)
 end
-task.wait(0.1)
-
-    RunService.Heartbeat:Wait()
-flushAllKeys()
-local moveStart = tick()
-local moveConn
-moveConn = RunService.RenderStepped:Connect(function()
-    if tick() - moveStart >= 0.1 then
-        moveConn:Disconnect()
-        flushAllKeys()
-        return
-    end
-    if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
-end)
 
     task.spawn(function()
         local dashConfirmed = false
@@ -3009,8 +3008,6 @@ end)
             end)
         end
 
-        qHasFired = true
-        tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
         flushAllKeys()
@@ -3059,7 +3056,7 @@ end)
 
     task.spawn(function()
         task.wait(0.20)
-        dashFaceActive = false
+        
         task.delay(0.15, function()
             State.comboDashLock    = false
             State.AnglePredActive  = false
