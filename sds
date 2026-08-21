@@ -2952,30 +2952,24 @@ local function fireCombo()
 
 local qHasFired = false
 
--- hold movement for 0.005 seconds
-if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
-local moveHoldConn
-local moveHoldStart = tick()
-moveHoldConn = RunService.Heartbeat:Connect(function()
-    if tick() - moveHoldStart >= 0.005 then
-        moveHoldConn:Disconnect()
-        return
-    end
+task.spawn(function()
+    -- frame 1: start movement
     if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
-end)
+    RunService.Heartbeat:Wait()
 
--- at 0.003 seconds: tap dash while still moving
-task.delay(0.003, function()
+    -- frame 2: still moving, fire dash
+    if sideKey == Enum.KeyCode.A then moveLeft() else moveRight() end
     tapBtn(dashBtn)
     qHasFired = true
-end)
+    RunService.Heartbeat:Wait()
 
--- at 0.005 seconds: stop movement, then next frame do the turn
-task.delay(0.005, function()
+    -- frame 3: stop movement
     flushAllKeys()
     local hum2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if hum2 then hum2:Move(Vector3.new(0,0,0), false) end
     RunService.Heartbeat:Wait()
+
+    -- frame 4: turn
     local mr2 = getMyRootPart()
     local tp2 = target and getTargetPosition(target)
     if mr2 and tp2 then
