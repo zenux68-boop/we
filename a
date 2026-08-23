@@ -17,6 +17,29 @@ local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
 
+local meleeBtn = nil
+local dashBtn = nil
+task.spawn(function()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    local controls = pg:WaitForChild("Controls")
+    local jump = controls:WaitForChild("Mobile"):WaitForChild("Jump")
+    meleeBtn = jump:WaitForChild("Melee")
+    dashBtn = jump:WaitForChild("Dash")
+end)
+
+local function tapBtn(btn)
+    if not btn then return end
+    local absPos = btn.AbsolutePosition
+    local absSize = btn.AbsoluteSize
+    local x = absPos.X + absSize.X / 2
+    local y = absPos.Y + absSize.Y / 2
+    local id = math.random(1000, 9999)
+    pcall(function()
+        VIM:SendTouchEvent(id, 0, x, y)
+        VIM:SendTouchEvent(id, 2, x, y)
+    end)
+end
+
 --========================================================================
 -- LOCK-ON CONFIG
 --========================================================================
@@ -1235,8 +1258,7 @@ refreshRayFilter()
 -- AUTO BLOCK — INPUT HELPERS
 --========================================================================
 local function tapM1()
-    VIM:SendMouseButtonEvent(0, 0, 0, true,  game, 0)
-    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    tapBtn(meleeBtn)
 end
 
 local function sideDash()
