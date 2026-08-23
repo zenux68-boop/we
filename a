@@ -1108,18 +1108,10 @@ local function runOrbitToBack(target, orbitRadius, releaseOnBack, onDone)
             mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
             RunService.Heartbeat:Wait()
             mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
-
-            scriptHeldKeys[sideKey]        = true
-            scriptHeldKeys[Enum.KeyCode.Q] = true
-            VIM:SendKeyEvent(true,  sideKey,        false, game)
             task.wait(0.016)
-            VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
+            tapBtn(dashBtn)
             task.wait(0.03)
-            VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
-            scriptHeldKeys[Enum.KeyCode.Q] = nil
             task.wait(0.03)
-            VIM:SendKeyEvent(false, sideKey,        false, game)
-            scriptHeldKeys[sideKey]        = nil
 
             if i < 2 then task.wait(0.18) end
         end
@@ -1183,17 +1175,10 @@ local function chainSideDash(target)
 
     runOrbitToBack(target, 3, true, nil)
 
-    scriptHeldKeys[sideKey]        = true
-    scriptHeldKeys[Enum.KeyCode.Q] = true
-    VIM:SendKeyEvent(true,  sideKey,        false, game)
     task.wait(0.016)
-    VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
+    tapBtn(dashBtn)
     task.wait(0.03)
-    VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
-    scriptHeldKeys[Enum.KeyCode.Q] = nil
     task.wait(0.03)
-    VIM:SendKeyEvent(false, sideKey,        false, game)
-    scriptHeldKeys[sideKey]        = nil
 
     task.delay(0.15, function()
         trackingActive = false
@@ -1290,8 +1275,6 @@ local function sideDash()
     end
 
     local sideKey = LastHeldSide == Enum.KeyCode.A and Enum.KeyCode.A or Enum.KeyCode.D
-    scriptHeldKeys[sideKey]        = true
-    scriptHeldKeys[Enum.KeyCode.Q] = true
     VIM:SendKeyEvent(true,  sideKey,        false, game)
     VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
     RunService.Heartbeat:Wait()
@@ -2878,11 +2861,9 @@ end)
 
 
 local function flushAllKeys()
-    VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.A, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.S, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.D, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum:Move(Vector3.new(0, 0, 0), false) end
 end
 
 --========================================================================
@@ -2987,11 +2968,16 @@ local function fireCombo()
     end)
 
     RunService.Heartbeat:Wait()
-    VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.A, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.S, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.D, false, game)
-    VIM:SendKeyEvent(true, sideKey, false, game)
+    local function moveForSide()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if hum and root then
+            local dir = sideKey == Enum.KeyCode.A and -root.CFrame.RightVector or root.CFrame.RightVector
+            hum:Move(Vector3.new(dir.X, 0, dir.Z), false)
+        end
+    end
+    moveForSide()
 
     task.spawn(function()
         task.wait(0.08)
@@ -3022,11 +3008,10 @@ local function fireCombo()
         end
 
         qHasFired = true
-        VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
+        tapBtn(dashBtn)
         task.wait(0.03)
-        VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
         task.wait(0.03)
-        VIM:SendKeyEvent(false, sideKey, false, game)
+        
 
         if not animator then return end
 
@@ -3073,8 +3058,17 @@ local function fireCombo()
     task.spawn(function()
         task.wait(0.20)
         dashFaceActive = false
-        VIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
-        task.delay(0.1, function() VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game) end)
+        do
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and root then hum:Move(root.CFrame.LookVector, false) end
+        end
+        task.delay(0.1, function()
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum:Move(Vector3.new(0,0,0), false) end
+        end)
         task.delay(0.15, function()
             State.comboDashLock    = false
             State.AnglePredActive  = false
@@ -3243,11 +3237,15 @@ local function fireComboChain()
     end)
 
     RunService.Heartbeat:Wait()
-    VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.A, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.S, false, game)
-    VIM:SendKeyEvent(false, Enum.KeyCode.D, false, game)
-    VIM:SendKeyEvent(true,  sideKey, false, game)
+    do
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if hum and root then
+            local dir = sideKey == Enum.KeyCode.A and -root.CFrame.RightVector or root.CFrame.RightVector
+            hum:Move(Vector3.new(dir.X, 0, dir.Z), false)
+        end
+    end
     
 
     task.spawn(function()
@@ -3279,11 +3277,10 @@ local function fireComboChain()
         end
 
         fireDivergentFist()
-        VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
+        tapBtn(dashBtn)
         task.wait(0.03)
-        VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
         task.wait(0.03)
-        VIM:SendKeyEvent(false, sideKey, false, game)
+        
 
         if not animator then return end
 
