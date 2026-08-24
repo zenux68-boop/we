@@ -16,6 +16,7 @@ local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = Workspace.CurrentCamera
+local ControlModule = require(LocalPlayer.PlayerScripts:WaitForChild("PlayerModule")):GetControls()
 
 local meleeBtn = nil
 local dashBtn = nil
@@ -1108,6 +1109,9 @@ local function runOrbitToBack(target, orbitRadius, releaseOnBack, onDone)
             mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
             RunService.Heartbeat:Wait()
             mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+
+            scriptHeldKeys[sideKey]        = true
+            scriptHeldKeys[Enum.KeyCode.Q] = true
             task.wait(0.016)
             tapBtn(dashBtn)
             task.wait(0.03)
@@ -1275,13 +1279,9 @@ local function sideDash()
     end
 
     local sideKey = LastHeldSide == Enum.KeyCode.A and Enum.KeyCode.A or Enum.KeyCode.D
-    VIM:SendKeyEvent(true,  sideKey,        false, game)
-    VIM:SendKeyEvent(true,  Enum.KeyCode.Q, false, game)
+    ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
     RunService.Heartbeat:Wait()
-    VIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
-    scriptHeldKeys[Enum.KeyCode.Q] = nil
-    VIM:SendKeyEvent(false, sideKey,        false, game)
-    scriptHeldKeys[sideKey]        = nil
+    ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
     task.delay(0.18, function()
         State.AnglePredActive  = false
@@ -2456,7 +2456,6 @@ local function hookHandicapRemote(remote)
 
             task.spawn(function()
                 engageTempCharLock()
-                VIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
                 while chainEnabled do
                     RunService.Heartbeat:Wait()
                     local mr = getMyRootPart()
@@ -2467,10 +2466,11 @@ local function hookHandicapRemote(remote)
                         tr.Position.Z - mr.Position.Z)
                     if toTgt.Magnitude > 0.01 then
                         mr.CFrame = CFrame.new(mr.Position, mr.Position + toTgt.Unit)
+                        ControlModule.activeController.moveVector = Vector3.new(0, 0, -1)
                     end
                     if toTgt.Magnitude <= 3 then break end
                 end
-                VIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+                ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
                 if not chainEnabled then return end
 
@@ -2861,9 +2861,7 @@ end)
 
 
 local function flushAllKeys()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then hum:Move(Vector3.new(0, 0, 0), false) end
+   ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 end
 
 --========================================================================
@@ -2968,16 +2966,7 @@ local function fireCombo()
     end)
 
     RunService.Heartbeat:Wait()
-    local function moveForSide()
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and root then
-            local dir = sideKey == Enum.KeyCode.A and -root.CFrame.RightVector or root.CFrame.RightVector
-            hum:Move(Vector3.new(dir.X, 0, dir.Z), false)
-        end
-    end
-    moveForSide()
+ ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
 
     task.spawn(function()
         task.wait(0.08)
@@ -3011,7 +3000,7 @@ local function fireCombo()
         tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
-        
+        ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
         if not animator then return end
 
@@ -3058,17 +3047,8 @@ local function fireCombo()
     task.spawn(function()
         task.wait(0.20)
         dashFaceActive = false
-        do
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if hum and root then hum:Move(root.CFrame.LookVector, false) end
-        end
-        task.delay(0.1, function()
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then hum:Move(Vector3.new(0,0,0), false) end
-        end)
+        ControlModule.activeController.moveVector = Vector3.new(0, 0, -1)
+        task.delay(0.1, function() ControlModule.activeController.moveVector = Vector3.new(0, 0, 0) end)
         task.delay(0.15, function()
             State.comboDashLock    = false
             State.AnglePredActive  = false
@@ -3237,15 +3217,7 @@ local function fireComboChain()
     end)
 
     RunService.Heartbeat:Wait()
-    do
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and root then
-            local dir = sideKey == Enum.KeyCode.A and -root.CFrame.RightVector or root.CFrame.RightVector
-            hum:Move(Vector3.new(dir.X, 0, dir.Z), false)
-        end
-    end
+   ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
     
 
     task.spawn(function()
@@ -3280,7 +3252,7 @@ local function fireComboChain()
         tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
-        
+       ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
         if not animator then return end
 
