@@ -1,0 +1,4854 @@
+--[[
+    COMBINED SCRIPT: LOCK-ON + AUTO BLOCK + MANJI KICK + AUTO BLACK FLASH + EVASIVE TRACKER + VILTRUMITE FLIGHT + INVISIBILITY
+    Type: LocalScript
+    Place: StarterPlayer > StarterPlayerScripts
+]]
+
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local VIM               = game:GetService("VirtualInputManager")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CAS = game:GetService("ContextActionService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera      = Workspace.CurrentCamera
+local ControlModule = require(LocalPlayer.PlayerScripts:WaitForChild("PlayerModule")):GetControls()
+
+local meleeBtn = nil
+local dashBtn = nil
+task.spawn(function()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    local controls = pg:WaitForChild("Controls")
+    local jump = controls:WaitForChild("Mobile"):WaitForChild("Jump")
+    meleeBtn = jump:WaitForChild("Melee")
+    dashBtn = jump:WaitForChild("Dash")
+end)
+
+local function tapBtn(btn)
+    if not btn then return end
+    local absPos = btn.AbsolutePosition
+    local absSize = btn.AbsoluteSize
+    local x = absPos.X + absSize.X / 2
+    local y = absPos.Y + absSize.Y / 2
+    local id = math.random(1000, 9999)
+    pcall(function()
+        VIM:SendTouchEvent(id, 0, x, y)
+        VIM:SendTouchEvent(id, 2, x, y)
+    end)
+end
+
+--========================================================================
+-- LOCK-ON CONFIG
+--========================================================================
+local CONFIG = {
+    DefaultToggleKey        = Enum.KeyCode.T,
+    MaxLockDistance         = 250,
+    MaxLockAngle            = 50,
+    BreakLockOnTargetDeath  = true,
+    BreakLockOnTargetLeave  = true,
+    BreakLockOnOutOfRange   = true,
+    OutOfRangeBuffer        = 50,
+
+    CameraBackDistance      = 10,
+    CameraHeight            = 2.5,
+    CameraCollisionPadding  = 0.5,
+    CameraSideOffset        = 2.5,
+    CameraUpOffset          = 1.5,
+    CameraVerticalOffset    = 0,
+    CameraAimSideOffset     = 0,
+
+    ReticleEnabled          = true,
+    ReticleColor            = Color3.fromRGB(60, 255, 60),
+}
+
+
+local ANGLEPRED = {
+    ActivationRange        = 15,
+    ForwardActivationRange = 15,
+    ForwardReturnTimer     = 0.6,
+    LeftRightAngle         = 180,
+    ForwardAngle           = 180,
+    ReturnTimer            = 0.3,
+    DebugPrint             = false,
+}
+
+--========================================================================
+-- AUTO BLOCK CONFIG
+--========================================================================
+local BLOCK = {
+    NORMAL_HOLD_TIME   = 0.3,
+    SWING_HOLD_TIME    = 0.21,
+    SPECIAL_HOLD_TIME  = 0.6,
+    PUNISH_EXTRA_TIME  = 0.2,
+    NORMAL_RANGE       = 8,
+    SPECIAL_RANGE      = 30,
+    PUNISH_RANGE       = 8,
+    BLOCK_KEY          = Enum.KeyCode.F,
+    DELAYED_RANGE      = 13,
+    DELAYED_TIMEOUT    = 0.8,
+}
+
+--========================================================================
+-- MANJI / BLACK FLASH CONFIG
+--========================================================================
+local MANJI_RANGE     = 8
+local TRIGGER_RANGE   = 8
+local MANJI_KEY       = Enum.KeyCode.Four
+local MANJI_COOLDOWN  = 1.0
+local BLACK_FLASH_KEY = Enum.KeyCode.Three
+local CHAIN_INTERVAL  = 0.27
+local BACK_DOT = -0.2
+local BACK_MIN_DIST = 2
+local CHAIN_RANGE         = 8
+local SWING2_BACK_ANGLE   = 90
+
+--========================================================================
+-- FLIGHT CONFIG
+--========================================================================
+local Settings = {
+    ToggleKey = Enum.KeyCode.F,
+    FlightEnabled = false,
+    BaseSpeed = 80,
+    SprintMultiplier = 1.75,
+    VerticalSpeed = 60,
+    Acceleration = 12,
+    MaxTiltDegrees = 25,
+    MaxDiveDegrees = 75,
+}
+
+local SprintSettings = {
+    ToggleKey = Enum.KeyCode.G,
+    Enabled = false,
+    GroundSpeed = 120,
+}
+
+local isFlying = false
+local currentVelocity = Vector3.new()
+local isGroundSprinting = false
+
+
+local INVIS = {
+    Key = Enum.KeyCode.P,
+    Enabled = false,
+    WaitingForBind = false,
+    ANIM_ID = "rbxassetid://108081843941348",
+    SEEK_TIME = 7,
+    TRANSPARENCY = 0.5,
+}
+
+local invisActive = false
+local invisAnimTrack = nil
+local invisPreSimConn = nil
+local invisRagdollConn = nil
+local invisTranspConn = nil
+local invisAnimObj = nil
+local invisLoopGen = 0
+
+
+
+
+
+
+local function getInvisAnimator()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return nil end
+    return hum:FindFirstChildOfClass("Animator")
+end
+
+local function getInvisRootJoint()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    return hrp:FindFirstChild("RootJoint")
+end
+
+local function stopAllInvisAnimTracks()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator")
+    if not animator then return end
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        if track.Animation and track.Animation.AnimationId == INVIS.ANIM_ID then
+            track:Stop(0)
+        end
+    end
+end
+
+local function cleanupInvis()
+    invisActive = false
+    invisLoopGen = invisLoopGen + 1
+
+    if invisPreSimConn then invisPreSimConn:Disconnect(); invisPreSimConn = nil end
+    if invisRagdollConn then invisRagdollConn:Disconnect(); invisRagdollConn = nil end
+    if invisTranspConn then invisTranspConn:Disconnect(); invisTranspConn = nil end
+
+    if invisAnimTrack then
+        pcall(function() invisAnimTrack:Stop(0) end)
+        invisAnimTrack = nil
+    end
+
+    stopAllInvisAnimTracks()
+
+    local char = LocalPlayer.Character
+    if char then
+        for _, animObj in ipairs(char:GetChildren()) do
+            if animObj:IsA("Animation") then animObj:Destroy() end
+        end
+        for _, v in ipairs(char:GetDescendants()) do
+            if v:IsA("Motor6D") then
+                pcall(function() v.Enabled = true end)
+            elseif v:IsA("BallSocketConstraint") or v:IsA("HingeConstraint") then
+                pcall(function() v.Enabled = false end)
+            end
+        end
+    end
+
+    -- restore full visibility
+    local char2 = LocalPlayer.Character
+    if not char2 then return end
+    for _, part in ipairs(char2:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            part.LocalTransparencyModifier = 0
+        end
+    end
+end
+
+local function startInvis()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local animator = getInvisAnimator()
+    if not animator then return end
+
+    cleanupInvis()
+    invisActive = true
+    local myGen = invisLoopGen
+
+    -- enforce 0.5 transparency every PostSimulation frame
+    invisTranspConn = RunService.PostSimulation:Connect(function()
+        if not invisActive then return end
+        local char2 = LocalPlayer.Character
+        if not char2 then return end
+        for _, part in ipairs(char2:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                if part.LocalTransparencyModifier ~= INVIS.TRANSPARENCY then
+                    part.LocalTransparencyModifier = INVIS.TRANSPARENCY
+                end
+            end
+        end
+    end)
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = INVIS.ANIM_ID
+    anim.Parent = char
+    invisAnimObj = anim
+
+    local ok, track = pcall(function()
+        return animator:LoadAnimation(anim)
+    end)
+    if not ok then
+        warn("[INVIS] LoadAnimation failed:", track)
+        invisActive = false
+        return
+    end
+
+    invisAnimTrack = track
+    invisAnimTrack.Priority = Enum.AnimationPriority.Action4
+    invisAnimTrack:Play(0, 1, 1)
+    invisAnimTrack:AdjustSpeed(0)
+    RunService.Heartbeat:Wait()
+    invisAnimTrack.TimePosition = INVIS.SEEK_TIME
+    RunService.Heartbeat:Wait()
+    RunService.Heartbeat:Wait()
+    invisAnimTrack:AdjustSpeed(0)
+
+    invisPreSimConn = RunService.PreSimulation:Connect(function()
+        if not invisActive then return end
+        local rootJoint = getInvisRootJoint()
+        if rootJoint then
+            rootJoint.Transform = CFrame.new()
+        end
+    end)
+
+    invisRagdollConn = RunService.PreSimulation:Connect(function()
+        if not invisActive then return end
+        local char2 = LocalPlayer.Character
+        if not char2 then return end
+        for _, v in ipairs(char2:GetDescendants()) do
+            if v:IsA("Motor6D") then
+                pcall(function() v.Enabled = true end)
+            elseif v:IsA("BallSocketConstraint") or v:IsA("HingeConstraint") then
+                pcall(function() v.Enabled = false end)
+            end
+        end
+    end)
+
+    task.spawn(function()
+        while invisActive and invisLoopGen == myGen do
+            local animator2 = getInvisAnimator()
+            if animator2 and invisAnimObj and invisLoopGen == myGen then
+                local ok2, track2 = pcall(function()
+                    return animator2:LoadAnimation(invisAnimObj)
+                end)
+                if ok2 and track2 and invisLoopGen == myGen then
+                    if invisAnimTrack then invisAnimTrack:Stop(0) end
+                    invisAnimTrack = track2
+                    invisAnimTrack.Priority = Enum.AnimationPriority.Action4
+                    invisAnimTrack:Play(0, 1, 1)
+                    invisAnimTrack:AdjustSpeed(0)
+                    invisAnimTrack.TimePosition = INVIS.SEEK_TIME
+                end
+            end
+            task.wait()
+        end
+        stopAllInvisAnimTracks()
+    end)
+end
+
+local function stopInvis()
+    cleanupInvis()
+end
+
+local function toggleInvis()
+    INVIS.Enabled = not INVIS.Enabled
+    if INVIS.Enabled then
+        startInvis()
+    else
+        stopInvis()
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    invisActive = false
+    invisAnimTrack = nil
+    invisLoopGen = invisLoopGen + 1
+    cleanupInvis()
+    INVIS.Enabled = false
+    if GUI_API and GUI_API.SetInvisState then
+        GUI_API.SetInvisState(false)
+    end
+end)
+
+
+--========================================================================
+-- STATE
+--========================================================================
+local circlingBlockActive = false
+local litteringReadyUntil = 0
+local _CirclingChargeTime = nil
+local State = {
+    Locked            = false,
+    Target            = nil,
+    MultiTargets      = {},
+    AntiTeamingEnabled = false,
+    ToggleKey         = CONFIG.DefaultToggleKey,
+    WaitingForKeybind = false,
+
+    AnglePredActive   = false,
+    AnglePredEndTime  = 0,
+    AnglePredOrbitDeg = 0,
+    AnglePredDashDir  = nil,
+
+    autoBlockEnabled       = true,
+    blockEverythingEnabled = true,
+    autoPunishEnabled      = true,
+    isHolding              = false,
+    punishCooldown         = false,
+    spinLockUntil          = 0,
+
+    comboDashLock        = false,
+    softLockEnabled      = false,
+    tempCharLock         = false,
+    ToggleMouseButton    = nil,
+}
+
+--========================================================================
+-- COOLDOWN TRACKER CONFIG
+--========================================================================
+local CDTRACK = {
+    VISIBLE_RANGE  = 100,
+    ENABLED        = true,
+    EVADE_MAX      = 50,
+    EVADE_FILL     = Color3.fromRGB(14, 71, 111),
+    EVADE_BG       = Color3.fromRGB(255, 255, 255),
+    EVADE_BORDER   = Color3.fromRGB(10, 50, 80),
+    ABILITY_FILL   = Color3.fromRGB(0, 120, 255),
+    ABILITY_BG     = Color3.fromRGB(30, 30, 30),
+    ABILITY_BORDER = Color3.fromRGB(60, 60, 60),
+    LABEL_BG       = Color3.fromRGB(20, 20, 20),
+    LABEL_TEXT     = Color3.fromRGB(255, 255, 255),
+}
+
+--========================================================================
+-- COOLDOWN TRACKER STATE
+--========================================================================
+local CDPlayerData = {}
+
+local function serviceNameFromAbility(abilityName)
+    return abilityName:gsub("%s+", "") .. "Service"
+end
+
+local function getCDRoot(player)
+    local c = player.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function destroyCDGui(player)
+    local data = CDPlayerData[player]
+    if not data then return end
+    if data.gui then
+        data.gui:Destroy()
+        data.gui = nil
+    end
+    data.abilityBars = {}
+    data.evadeFill   = nil
+end
+
+local function distanceToCDPlayer(player)
+    local myChar = LocalPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return math.huge end
+    local root = getCDRoot(player)
+    if not root then return math.huge end
+    return (myRoot.Position - root.Position).Magnitude
+end
+
+local function createCDGui(player)
+    destroyCDGui(player)
+    local root = getCDRoot(player)
+    if not root then return end
+    local data = CDPlayerData[player]
+    if not data then return end
+
+    local abilities = data.abilities
+    local numAbilities = #abilities
+
+    local rowH      = 1.1
+    local rowGap    = 0.14
+    local nameW     = 4.4
+    local evadeW    = 0.56
+    local totalW    = nameW + evadeW + 0.20
+    local totalH    = (rowH + rowGap) * numAbilities + 0.28
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name                  = "CDTrackerGui"
+    bb.Adornee               = root
+    bb.Size                  = UDim2.new(totalW, 0, totalH, 0)
+    bb.StudsOffset           = Vector3.new(0, 7.5, 0)
+    bb.AlwaysOnTop           = true
+    bb.LightInfluence        = 0
+    bb.ResetOnSpawn          = false
+    bb.Parent                = root
+
+    data.gui         = bb
+    data.abilityBars = {}
+
+    local evadeBg = Instance.new("Frame")
+    evadeBg.AnchorPoint      = Vector2.new(1, 0)
+    evadeBg.Position         = UDim2.new(1, 0, 0, 0)
+    evadeBg.Size             = UDim2.new(evadeW / totalW, 0, 1, 0)
+    evadeBg.BackgroundColor3 = CDTRACK.EVADE_BG
+    evadeBg.BorderSizePixel  = 0
+    evadeBg.Parent           = bb
+    Instance.new("UICorner", evadeBg).CornerRadius = UDim.new(0, 4)
+    local evadeStroke = Instance.new("UIStroke")
+    evadeStroke.Color     = CDTRACK.EVADE_BORDER
+    evadeStroke.Thickness = 1.8
+    evadeStroke.Parent    = evadeBg
+
+    local evadeFill = Instance.new("Frame")
+    evadeFill.AnchorPoint      = Vector2.new(0, 1)
+    evadeFill.Position         = UDim2.new(0, 0, 1, 0)
+    evadeFill.Size             = UDim2.new(1, 0, data.evadeFraction, 0)
+    evadeFill.BackgroundColor3 = CDTRACK.EVADE_FILL
+    evadeFill.BorderSizePixel  = 0
+    evadeFill.ZIndex           = 2
+    evadeFill.Parent           = evadeBg
+    Instance.new("UICorner", evadeFill).CornerRadius = UDim.new(0, 4)
+    data.evadeFill = evadeFill
+
+    for i, ab in ipairs(abilities) do
+        local yPos = ((i - 1) * (rowH + rowGap)) / totalH
+
+        local tileBg = Instance.new("Frame")
+        tileBg.Position         = UDim2.new(0, 0, yPos, 0)
+        tileBg.Size             = UDim2.new(nameW / totalW, 0, rowH / totalH, 0)
+        tileBg.BackgroundColor3 = CDTRACK.LABEL_BG
+        tileBg.BorderSizePixel  = 0
+        tileBg.ClipsDescendants = true
+        tileBg.Parent           = bb
+        Instance.new("UICorner", tileBg).CornerRadius = UDim.new(0, 5)
+        local tileStroke = Instance.new("UIStroke")
+        tileStroke.Color     = CDTRACK.ABILITY_BORDER
+        tileStroke.Thickness = 1
+        tileStroke.Parent    = tileBg
+
+        local cdFill = Instance.new("Frame")
+        cdFill.AnchorPoint            = Vector2.new(0, 0)
+        cdFill.Position               = UDim2.new(0, 0, 0, 0)
+        cdFill.Size                   = UDim2.new(1, 0, 1 - ab.cdFraction, 0)
+        cdFill.BackgroundColor3       = Color3.fromRGB(30, 140, 255)
+        cdFill.BackgroundTransparency = 0.25
+        cdFill.BorderSizePixel        = 0
+        cdFill.ZIndex                 = 2
+        cdFill.Parent                 = tileBg
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size                   = UDim2.new(1, -8, 1, 0)
+        nameLbl.Position               = UDim2.new(0, 5, 0, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Font                   = Enum.Font.GothamBold
+        nameLbl.Text                   = ab.name
+        nameLbl.TextColor3             = CDTRACK.LABEL_TEXT
+        nameLbl.TextSize               = 11
+        nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
+        nameLbl.TextScaled             = true
+        nameLbl.ZIndex                 = 3
+        nameLbl.Parent                 = tileBg
+
+        data.abilityBars[i] = cdFill
+    end
+end
+
+local function setEvadeFill(player, fraction)
+    local data = CDPlayerData[player]
+    if not data then return end
+    fraction = math.clamp(fraction, 0, 1)
+    data.evadeFraction = fraction
+    if data.evadeFill then
+        data.evadeFill.Size = UDim2.new(1, 0, fraction, 0)
+    end
+end
+
+local function setAbilityFill(player, index, fraction)
+    local data = CDPlayerData[player]
+    if not data then return end
+    fraction = math.clamp(fraction, 0, 1)
+    if data.abilityBars and data.abilityBars[index] then
+        local fill = data.abilityBars[index]
+        local remaining = 1 - fraction
+        fill.AnchorPoint = Vector2.new(0, 1)
+        fill.Position    = UDim2.new(0, 0, 1, 0)
+        fill.Size        = UDim2.new(1, 0, remaining, 0)
+        data.abilities[index].cdFraction = fraction
+    end
+end
+
+local function startAbilityCooldown(player, index)
+    local data = CDPlayerData[player]
+    if not data then return end
+    local ab = data.abilities[index]
+    if not ab then return end
+    if ab.cdRunning then return end
+    ab.cdRunning  = true
+    ab.cdFraction = 0
+    setAbilityFill(player, index, 0)
+
+    local duration = ab.maxCd
+    local startTime = tick()
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if not CDPlayerData[player] then conn:Disconnect(); return end
+        local elapsed  = tick() - startTime
+        local fraction = math.clamp(elapsed / duration, 0, 1)
+        setAbilityFill(player, index, fraction)
+        if fraction >= 1 then
+            ab.cdRunning = false
+            conn:Disconnect()
+        end
+    end)
+end
+
+local function initCDPlayer(player)
+    if player == LocalPlayer then return end
+    if CDPlayerData[player] then return end
+
+    CDPlayerData[player] = {
+        evadeFraction = 1,
+        evadeFill     = nil,
+        gui           = nil,
+        abilities     = {},
+        abilityBars   = {},
+        evadeConn     = nil,
+    }
+
+    local function onCharacter(char)
+        local data = CDPlayerData[player]
+        if not data then return end
+
+        data.evadeFraction = 1
+        data.abilities     = {}
+        data.abilityBars   = {}
+
+        if data.evadeConn then
+            data.evadeConn:Disconnect()
+            data.evadeConn = nil
+        end
+
+        local root = char:WaitForChild("HumanoidRootPart", 10)
+        if not root then return end
+        task.wait(2)
+
+        local moveset = char:WaitForChild("Moveset", 5)
+        if moveset then
+            for _, v in ipairs(moveset:GetChildren()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("StringValue") then
+                    table.insert(data.abilities, {
+                        name       = v.Name,
+                        maxCd      = v.Value,
+                        cdFraction = 1,
+                        cdRunning  = false,
+                        service    = serviceNameFromAbility(v.Name),
+                    })
+                end
+            end
+        end
+        if CDTRACK.ENABLED then
+            createCDGui(player)
+        end
+
+        data.evadeConn = char:GetAttributeChangedSignal("Evade"):Connect(function()
+            local val      = char:GetAttribute("Evade") or 0
+            local fraction = math.clamp(val / CDTRACK.EVADE_MAX, 0, 1)
+            setEvadeFill(player, fraction)
+        end)
+
+        local initEvade = char:GetAttribute("Evade") or 0
+        setEvadeFill(player, math.clamp(initEvade / CDTRACK.EVADE_MAX, 0, 1))
+    end
+
+    if player.Character then
+        task.spawn(onCharacter, player.Character)
+    end
+    player.CharacterAdded:Connect(onCharacter)
+    player.CharacterRemoving:Connect(function()
+        destroyCDGui(player)
+    end)
+end
+
+local function cleanupCDPlayer(player)
+    local data = CDPlayerData[player]
+    if data and data.evadeConn then
+        data.evadeConn:Disconnect()
+    end
+    destroyCDGui(player)
+    CDPlayerData[player] = nil
+end
+
+local function onAbilityFired(serviceName, firingPlayer)
+    local data = CDPlayerData[firingPlayer]
+    if not data then return end
+    for i, ab in ipairs(data.abilities) do
+        if ab.service == serviceName then
+            startAbilityCooldown(firingPlayer, i)
+            return
+        end
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    task.spawn(initCDPlayer, p)
+end
+Players.PlayerAdded:Connect(initCDPlayer)
+Players.PlayerRemoving:Connect(cleanupCDPlayer)
+
+RunService.Heartbeat:Connect(function()
+    for player, data in pairs(CDPlayerData) do
+        if data.gui then
+            if not CDTRACK.ENABLED then
+                data.gui.Enabled = false
+            else
+                data.gui.Enabled = distanceToCDPlayer(player) <= CDTRACK.VISIBLE_RANGE
+            end
+        end
+    end
+end)
+
+local function engageTempCharLock()
+    if not State.softLockEnabled then return end
+    State.tempCharLock = true
+    local c = LocalPlayer.Character
+    if c then
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h.AutoRotate = false end
+    end
+end
+
+local function releaseTempCharLock()
+    if not State.softLockEnabled then return end
+    State.tempCharLock = false
+    local c = LocalPlayer.Character
+    if c then
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h.AutoRotate = true end
+    end
+end
+
+local enabled               = false
+local lastManjiTime         = 0
+local autoBlackFlashEnabled = false
+local bfChainEnabled = false
+local chainEnabled          = false
+local chainRunning          = false
+local lastRPressTime        = 0
+
+local chainM1SuppressUntil = 0
+local lockingAtBack        = false
+local anglePredLockActive  = false
+local comboM1WindowUntil   = 0
+local AnimationTriggers = {
+    ["rbxassetid://100962226150441"] = 0.19,
+    ["rbxassetid://95852624447551"]  = 0.19,
+    ["rbxassetid://74145636023952"]  = 0.19,
+    ["rbxassetid://72475960800126"]  = 0.20,
+}
+
+local StraightAnimations = {
+    ["rbxassetid://123171106092050"] = true,
+}
+
+local GUI_API = {}
+
+local COMBO = {
+    Range          = 17,
+    ManualKey      = Enum.KeyCode.E,
+    ManualMouseButton = nil,
+}
+
+local comboManualArmed  = false
+local comboInProgress   = false
+local comboInProgress2  = false
+local comboManualArmed2 = false
+local LastHeldSide      = Enum.KeyCode.A
+
+local comboArmedPersistent     = false
+local comboArmedPersistentTime = 0
+local COMBO_PERSISTENT_TIMEOUT = 10.0
+
+local COMBO2 = {
+    ManualKey      = Enum.KeyCode.C,
+}
+
+local COMBO3 = {
+    ManualKey      = Enum.KeyCode.U,
+}
+local ANTITEAM = {
+    ClearKey       = Enum.KeyCode.X,
+}
+
+local scriptHeldKeys = {}
+
+local function scriptPressKey(key)
+    scriptHeldKeys[key] = true
+    VIM:SendKeyEvent(true, key, false, game)
+end
+
+local function scriptReleaseKey(key)
+    VIM:SendKeyEvent(false, key, false, game)
+    scriptHeldKeys[key] = nil
+end
+
+local function scriptTapKey(key, holdTime)
+    holdTime = holdTime or 0.05
+    scriptHeldKeys[key] = true
+    VIM:SendKeyEvent(true, key, false, game)
+    task.delay(holdTime, function()
+        VIM:SendKeyEvent(false, key, false, game)
+        scriptHeldKeys[key] = nil
+    end)
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if input.KeyCode == Enum.KeyCode.A then
+        LastHeldSide = Enum.KeyCode.A
+    elseif input.KeyCode == Enum.KeyCode.D then
+        LastHeldSide = Enum.KeyCode.D
+    end
+end)
+
+local COMBO_SETTINGS = {
+    DashAngleDeg  = 69,
+    AngleHoldTime = 0.30,
+}
+
+local function getHumanoid(player)
+    local c = player.Character
+    if not c then return nil end
+    local h = c:FindFirstChildOfClass("Humanoid")
+    return (h and h.Health > 0) and h or nil
+end
+
+local function getTargetPosition(player)
+    local c = player.Character
+    if not c or not c.PrimaryPart then return nil end
+    return c:GetPivot().Position
+end
+
+local function getMyRootPart()
+    local c = LocalPlayer.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function isValidCandidate(player)
+    if player == LocalPlayer then return false end
+    return player.Character and getHumanoid(player) and getTargetPosition(player) and true or false
+end
+
+local function isInRange(player, range)
+    local myRoot = getMyRootPart()
+    if not myRoot or not player.Character then return false end
+    local theirRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    if not theirRoot then return false end
+    return (myRoot.Position - theirRoot.Position).Magnitude <= range
+end
+
+local function setReticleColor(color)
+    if not ActiveReticleGui then return end
+    for _, f in ipairs(ActiveReticleGui:GetDescendants()) do
+        if f:IsA("Frame") then f.BackgroundColor3 = color end
+    end
+end
+
+local ActiveReticleGui = nil
+
+local function destroyReticle()
+    if ActiveReticleGui then ActiveReticleGui:Destroy(); ActiveReticleGui = nil end
+end
+
+local function makeRect(parent, pos, size, zindex)
+    local f = Instance.new("Frame")
+    f.AnchorPoint            = Vector2.new(0, 0)
+    f.Position               = pos
+    f.Size                   = size
+    f.BackgroundColor3       = Color3.fromRGB(0, 255, 70)
+    f.BorderSizePixel        = 0
+    f.BackgroundTransparency = 0
+    f.ZIndex                 = zindex or 1
+    f.Parent                 = parent
+    return f
+end
+
+local function createReticleFor(player)
+    destroyReticle()
+    if not CONFIG.ReticleEnabled or not player or not player.Character then return end
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name           = "LockOnReticle"
+    bb.Adornee        = root
+    bb.Size           = UDim2.new(4.5, 0, 5.5, 0)
+    bb.StudsOffset    = Vector3.new(0, 0.5, 0)
+    bb.AlwaysOnTop    = true
+    bb.LightInfluence = 0
+    bb.Parent         = root
+
+    local corners = {
+        {0.20, 0.23}, {0.70, 0.23},
+        {0.20, 0.70}, {0.70, 0.70},
+    }
+    local armS, thkS = 0.10, 0.025
+    for _, c in ipairs(corners) do
+        local cx, cy = c[1], c[2]
+        makeRect(bb, UDim2.new(cx-armS, 0, cy-thkS/2, 0), UDim2.new(armS*2, 0, thkS, 0), 1)
+        makeRect(bb, UDim2.new(cx-thkS/2, 0, cy-armS, 0), UDim2.new(thkS, 0, armS*2, 0), 1)
+    end
+
+    local cx, cy   = 0.5, 0.5
+    local cGap, cArm, cThk, dSz = 0.15, 0.26, 0.025, 0.04
+    makeRect(bb, UDim2.new(cx-cGap-cArm, 0, cy-cThk/2, 0), UDim2.new(cArm, 0, cThk, 0), 2)
+    makeRect(bb, UDim2.new(cx+cGap,      0, cy-cThk/2, 0), UDim2.new(cArm, 0, cThk, 0), 2)
+    makeRect(bb, UDim2.new(cx-cThk/2, 0, cy-cGap-cArm, 0), UDim2.new(cThk, 0, cArm, 0), 2)
+    makeRect(bb, UDim2.new(cx-cThk/2, 0, cy+cGap,      0), UDim2.new(cThk, 0, cArm, 0), 2)
+    makeRect(bb, UDim2.new(cx-dSz/2,  0, cy-dSz/2,     0), UDim2.new(dSz,  0, dSz,  0), 2)
+
+    ActiveReticleGui = bb
+end
+
+local DIRECTION_KEYWORDS = {
+    ["left"]     = "Left",
+    ["right"]    = "Right",
+    ["forward"]  = "Forward",
+    ["Chase"]    = "Forward",
+    ["chase"]    = "Forward",
+    ["back"]     = "Back",
+    ["backward"] = "Back",
+}
+
+local function findDirectionInArgs(...)
+    local args = { ... }
+    for i, v in ipairs(args) do
+        if type(v) == "string" then
+            local lower = v:lower()
+            local canon = DIRECTION_KEYWORDS[lower]
+            if canon then return canon, i, v end
+        end
+    end
+    local orderedKeywords = {
+        {"forwards", "Forward"},
+        {"Chase",    "Forward"},
+        {"chase",    "Forward"},
+        {"backward", "Back"},
+        {"right",    "Right"},
+        {"left",     "Left"},
+        {"back",     "Back"},
+    }
+    for i, v in ipairs(args) do
+        if type(v) == "string" then
+            local lower = v:lower()
+            for _, pair in ipairs(orderedKeywords) do
+                if lower:find(pair[1], 1, true) then
+                    return pair[2], i, v
+                end
+            end
+        end
+    end
+    return nil
+end
+
+
+local function getLockedTarget()
+    if State.Locked and State.Target then return State.Target end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        local char = p.Character
+        if not char then continue end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+        if root:FindFirstChild("LockOnReticle") then
+            return p
+        end
+    end
+    return nil
+end
+local function getDistance(player)
+    if not LocalPlayer.Character or not player.Character then return math.huge end
+    local myRoot    = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local theirRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not theirRoot then return math.huge end
+    return (myRoot.Position - theirRoot.Position).Magnitude
+end
+
+local function getClosestLockedTarget()
+    if not State.AntiTeamingEnabled or not State.softLockEnabled then
+        return State.Target
+    end
+    local closest, closestDist = nil, math.huge
+    for _, p in ipairs(State.MultiTargets) do
+        local d = getDistance(p)
+        if d < closestDist then
+            closestDist = d
+            closest = p
+        end
+    end
+    return closest
+end
+
+local function isLockedTarget(player)
+    if not State.AntiTeamingEnabled or not State.softLockEnabled then
+        return player == State.Target
+    end
+    for _, p in ipairs(State.MultiTargets) do
+        if p == player then return true end
+    end
+    return false
+end
+
+local function clearAllMultiTargets()
+    for _, p in ipairs(State.MultiTargets) do
+        if p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local reticle = root:FindFirstChild("LockOnReticle")
+                if reticle then reticle:Destroy() end
+            end
+        end
+    end
+    State.MultiTargets = {}
+    State.Locked = false
+    State.Target = nil
+end
+
+local function isAtBack(player)
+    if not player or not LocalPlayer.Character or not player.Character then return false end
+    local myRoot    = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local theirRoot = player.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not theirRoot then return false end
+
+    local toMe = Vector3.new(
+        myRoot.Position.X - theirRoot.Position.X,
+        0,
+        myRoot.Position.Z - theirRoot.Position.Z)
+    if toMe.Magnitude < 0.01 then return false end
+    toMe = toMe.Unit
+
+    local theirFwd = Vector3.new(
+        theirRoot.CFrame.LookVector.X, 0,
+        theirRoot.CFrame.LookVector.Z)
+    if theirFwd.Magnitude < 0.01 then return false end
+    theirFwd = theirFwd.Unit
+
+    return theirFwd:Dot(toMe) < BACK_DOT
+end
+
+local function pressKey(key)
+    local char = LocalPlayer.Character
+    local moveset = char and char:FindFirstChild("Moveset")
+    local divFist = moveset and moveset:FindFirstChild("Divergent Fist")
+    if not divFist then return end
+    local remote = ReplicatedStorage.Knit.Knit.Services.DivergentFistService.RE.Activated
+    if remote then remote:FireServer(divFist) end
+end
+
+local function fireManji()
+    if not enabled then return end
+    if tick() - lastManjiTime < MANJI_COOLDOWN then return end
+    lastManjiTime = tick()
+    local char = LocalPlayer.Character
+    local moveset = char and char:FindFirstChild("Moveset")
+    local manjiKick = moveset and moveset:FindFirstChild("Manji Kick")
+    if not manjiKick then return end
+    local remote = ReplicatedStorage.Knit.Knit.Services.ManjiKickService.RE.Activated
+    if remote then remote:FireServer(manjiKick) end
+end
+local function fireDivergentFist()
+    local char = LocalPlayer.Character
+    local moveset = char and char:FindFirstChild("Moveset")
+    local divFist = moveset and moveset:FindFirstChild("Divergent Fist")
+    if not divFist then return end
+    local remote = ReplicatedStorage.Knit.Knit.Services.DivergentFistService.RE.Activated
+    if remote then remote:FireServer(divFist) end
+end
+
+local function fireDash(direction)
+    local remote = ReplicatedStorage.Knit.Knit.Services.MovementService.RE.Dash
+    if remote then remote:FireServer(direction) end
+end
+
+--========================================================================
+-- AUTO BLACK FLASH
+--========================================================================
+--========================================================================
+-- AUTO BLACK FLASH
+--========================================================================
+local autoFlashDebounce = false
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not autoBlackFlashEnabled then return end
+    if processed then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if input.KeyCode ~= BLACK_FLASH_KEY then return end
+    if autoFlashDebounce then return end
+
+    autoFlashDebounce = true
+    task.delay(CHAIN_INTERVAL, function()
+        if autoBlackFlashEnabled then
+            pressKey(BLACK_FLASH_KEY)
+        end
+        autoFlashDebounce = false
+    end)
+end)
+
+local rPressed       = false
+local feintConfirmed = false
+
+local function getBestSideKey(target)
+    local myRoot    = getMyRootPart()
+    local theirRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not theirRoot then return Enum.KeyCode.A end
+
+    local theirBack = -Vector3.new(
+        theirRoot.CFrame.LookVector.X, 0,
+        theirRoot.CFrame.LookVector.Z).Unit
+
+    local toMe = Vector3.new(
+        myRoot.Position.X - theirRoot.Position.X, 0,
+        myRoot.Position.Z - theirRoot.Position.Z)
+    if toMe.Magnitude < 0.01 then return Enum.KeyCode.A end
+    toMe = toMe.Unit
+
+    local cross = theirBack:Cross(toMe)
+
+    if cross.Y > 0 then
+        return Enum.KeyCode.D
+    else
+        return Enum.KeyCode.A
+    end
+end
+
+--========================================================================
+-- SHARED ORBIT HELPER
+--========================================================================
+local function runOrbitToBack(target, orbitRadius, releaseOnBack, onDone)
+    local sideKey = getBestSideKey(target)
+    task.spawn(function()
+        for i = 1, 2 do
+            local mr = getMyRootPart()
+            local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            if not mr or not tr then break end
+
+            local theirBack = Vector3.new(
+                -tr.CFrame.LookVector.X, 0,
+                -tr.CFrame.LookVector.Z).Unit
+
+            local angleDeg = (sideKey == Enum.KeyCode.A) and 69 or -69
+            local rad = math.rad(angleDeg)
+            local dashDir = Vector3.new(
+                theirBack.X * math.cos(rad) - theirBack.Z * math.sin(rad), 0,
+                theirBack.X * math.sin(rad) + theirBack.Z * math.cos(rad)
+            ).Unit
+
+            mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+            RunService.Heartbeat:Wait()
+            mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+
+            scriptHeldKeys[sideKey]        = true
+            scriptHeldKeys[Enum.KeyCode.Q] = true
+            task.wait(0.016)
+            tapBtn(dashBtn)
+            task.wait(0.03)
+            task.wait(0.03)
+
+            if i < 2 then task.wait(0.18) end
+        end
+
+        if releaseOnBack then
+            lockingAtBack = true
+        else
+            if onDone then onDone() end
+        end
+    end)
+end
+
+local function chainSideDash(target)
+    engageTempCharLock()
+    if not target or not target.Character then return end
+    local myRoot = getMyRootPart()
+    if not myRoot then return end
+
+    local theirRoot = target.Character:FindFirstChild("HumanoidRootPart")
+    if not theirRoot then return end
+
+    local sideKey = getBestSideKey(target)
+
+    local trackingActive = true
+    local function calcLiveDashDir()
+        local mr = getMyRootPart()
+        local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not mr or not tr then return nil end
+        local theirBack = Vector3.new(
+            -tr.CFrame.LookVector.X, 0,
+            -tr.CFrame.LookVector.Z).Unit
+        local angleDeg = sideKey == Enum.KeyCode.A and 90 or -90
+        local rad = math.rad(angleDeg)
+        return Vector3.new(
+            theirBack.X * math.cos(rad) - theirBack.Z * math.sin(rad), 0,
+            theirBack.X * math.sin(rad) + theirBack.Z * math.cos(rad)
+        ).Unit
+    end
+
+    local initDir = calcLiveDashDir()
+    if initDir then
+        myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + initDir)
+        RunService.Heartbeat:Wait()
+        myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + initDir)
+    end
+
+    lockingAtBack = false
+
+    task.spawn(function()
+        while trackingActive do
+            RunService.Heartbeat:Wait()
+            if not trackingActive then break end
+            local mr = getMyRootPart()
+            if not mr then break end
+            local dir = calcLiveDashDir()
+            if dir then
+                mr.CFrame = CFrame.new(mr.Position, mr.Position + dir)
+            end
+        end
+    end)
+
+    runOrbitToBack(target, 3, true, nil)
+
+    task.wait(0.016)
+    tapBtn(dashBtn)
+    task.wait(0.03)
+    task.wait(0.03)
+
+    task.delay(0.15, function()
+        trackingActive = false
+        lockingAtBack  = false
+        releaseTempCharLock()
+    end)
+end
+
+local function runChain() end
+
+
+local function findBestTarget()
+    local best, bestScore = nil, math.huge
+    local vp     = Camera.ViewportSize
+    local sc     = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    local camPos = Camera.CFrame.Position
+    local camFwd = Camera.CFrame.LookVector
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isValidCandidate(p) then
+            local tp  = getTargetPosition(p)
+            local off = tp - camPos
+            local d   = off.Magnitude
+            if d <= CONFIG.MaxLockDistance then
+                local ang = math.deg(math.acos(math.clamp(camFwd:Dot(off.Unit), -1, 1)))
+                if ang <= CONFIG.MaxLockAngle then
+                    local sp, on = Camera:WorldToViewportPoint(tp)
+                    if on then
+                        local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude
+                        local s  = sd + d * 0.01
+                        if s < bestScore then bestScore = s; best = p end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local FacingAttachment       = nil
+local FacingAlignOrientation = nil
+
+local function destroyFacingConstraint()
+    if FacingAlignOrientation then FacingAlignOrientation:Destroy(); FacingAlignOrientation = nil end
+    if FacingAttachment        then FacingAttachment:Destroy();       FacingAttachment       = nil end
+end
+
+local cameraRayParams = RaycastParams.new()
+cameraRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function refreshRayFilter()
+    local c = LocalPlayer.Character
+    cameraRayParams.FilterDescendantsInstances = c and { c } or {}
+end
+LocalPlayer.CharacterAdded:Connect(function()
+    destroyFacingConstraint()
+    refreshRayFilter()
+end)
+refreshRayFilter()
+
+--========================================================================
+-- AUTO BLOCK — INPUT HELPERS
+--========================================================================
+local function tapM1()
+    tapBtn(meleeBtn)
+end
+
+local function sideDash()
+    engageTempCharLock()
+    local myRoot    = getMyRootPart()
+    local targetPos = State.Target and getTargetPosition(State.Target)
+
+    if myRoot and targetPos then
+        local toTarget = Vector3.new(
+            targetPos.X - myRoot.Position.X, 0,
+            targetPos.Z - myRoot.Position.Z)
+        if toTarget.Magnitude >= 0.01 then
+            toTarget = toTarget.Unit
+            local angleDeg = LastHeldSide == Enum.KeyCode.A and 90 or -90
+            local rad      = math.rad(angleDeg)
+            local faceDir  = Vector3.new(
+                toTarget.X * math.cos(rad) - toTarget.Z * math.sin(rad), 0,
+                toTarget.X * math.sin(rad) + toTarget.Z * math.cos(rad)
+            ).Unit
+
+            State.AnglePredActive  = true
+            State.comboDashLock    = true
+            State.AnglePredEndTime = math.huge
+
+            myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + faceDir)
+            RunService.Heartbeat:Wait()
+            myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + faceDir)
+        end
+    end
+
+    local sideKey = LastHeldSide == Enum.KeyCode.A and Enum.KeyCode.A or Enum.KeyCode.D
+    ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+    RunService.Heartbeat:Wait()
+    ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
+
+    task.delay(0.18, function()
+        State.AnglePredActive  = false
+        State.comboDashLock    = false
+        State.AnglePredEndTime = 0
+        releaseTempCharLock()
+    end)
+end
+
+local rawBlockActive = false
+local scriptHoldingF = false
+local blockHoldActive = false
+local blockHoldConn = nil
+
+
+
+local function startBlockHold(duration)
+    if blockHoldConn then blockHoldConn:Disconnect(); blockHoldConn = nil end
+    blockHoldActive = true
+    rawBlockActive = true
+    scriptHoldingF = true
+    scriptHeldKeys[BLOCK.BLOCK_KEY] = true
+
+    game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
+
+    blockHoldConn = RunService.Heartbeat:Connect(function()
+        if not blockHoldActive then
+            blockHoldConn:Disconnect()
+            blockHoldConn = nil
+            return
+        end
+        game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
+    end)
+
+    RunService.Heartbeat:Wait()
+    game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
+
+    task.delay(duration, function()
+        blockHoldActive = false
+        scriptHoldingF = false
+        if blockHoldConn then
+            blockHoldConn:Disconnect()
+            blockHoldConn = nil
+        end
+        game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
+        scriptHeldKeys[BLOCK.BLOCK_KEY] = nil
+        task.wait(0.1)
+        rawBlockActive = false
+    end)
+end
+
+local function rawBlock(holdTime, attackerPlayer)
+    local function executeRawBlock()
+        if rawBlockActive then return end
+        engageTempCharLock()
+        startBlockHold(holdTime)
+        task.delay(holdTime + 0.1, function()
+            releaseTempCharLock()
+        end)
+    end
+    executeRawBlock()
+end
+
+local function rawBlockInstant(duration)
+    if rawBlockActive then return end
+    rawBlockActive = true
+    scriptHoldingF = true
+    scriptHeldKeys[BLOCK.BLOCK_KEY] = true
+    blockHoldActive = true
+    game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
+    if blockHoldConn then blockHoldConn:Disconnect(); blockHoldConn = nil end
+    blockHoldConn = RunService.Heartbeat:Connect(function()
+        if not blockHoldActive then
+            blockHoldConn:Disconnect()
+            blockHoldConn = nil
+            return
+        end
+        game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Activated:FireServer()
+    end)
+    task.delay(duration, function()
+        blockHoldActive = false
+        scriptHoldingF = false
+        if blockHoldConn then
+            blockHoldConn:Disconnect()
+            blockHoldConn = nil
+        end
+        game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
+        scriptHeldKeys[BLOCK.BLOCK_KEY] = nil
+        task.wait(0.1)
+        rawBlockActive = false
+    end)
+end
+
+local function holdF(attackerPlayer, holdTime)
+    if not State.autoBlockEnabled then return end
+
+    local function executeBlock()
+        if State.isHolding then return end
+        State.isHolding = true
+
+        local shouldPunish =
+            State.autoPunishEnabled
+            and not State.punishCooldown
+            and tick() > State.spinLockUntil
+            and attackerPlayer
+            and isInRange(attackerPlayer, BLOCK.DELAYED_RANGE)
+
+        engageTempCharLock()
+        startBlockHold(holdTime)
+
+        task.delay(holdTime, function()
+            if shouldPunish then
+                State.punishCooldown = true
+                task.wait(0.05)
+                tapM1()
+                task.delay(0.2, function()
+                    releaseTempCharLock()
+                end)
+                task.delay(1, function()
+                    State.punishCooldown = false
+                end)
+            end
+        end)
+
+        local snapTime = shouldPunish and (holdTime + BLOCK.PUNISH_EXTRA_TIME) or holdTime
+        task.delay(snapTime, function()
+            State.isHolding = false
+            if not shouldPunish then
+                releaseTempCharLock()
+            end
+        end)
+    end
+
+    executeBlock()
+end
+
+local function isSwing(value)
+    return typeof(value) == "string" and string.match(value, "^Swing%d*$") ~= nil
+end
+
+--========================================================================
+-- AUTO BLOCK — ATTACK HANDLER
+--========================================================================
+local function checkAttack(args, remote)
+    if not State.Locked or not State.Target then return end
+
+    local serviceName = remote.Parent.Parent.Name
+
+    local attackerPlayer = nil
+    if typeof(args[2]) == "Instance" then
+        attackerPlayer = Players:GetPlayerFromCharacter(args[2])
+        if not attackerPlayer and args[2]:IsA("Player") then
+            attackerPlayer = args[2]
+        end
+    end
+    if not attackerPlayer then
+        for _, v in ipairs(args) do
+            if typeof(v) == "Instance" then
+                if v:IsA("Player") then
+                    attackerPlayer = v; break
+                end
+                local fromChar = Players:GetPlayerFromCharacter(v)
+                if fromChar then attackerPlayer = fromChar; break end
+            end
+        end
+    end
+
+    if State.AntiTeamingEnabled and State.softLockEnabled and attackerPlayer and isLockedTarget(attackerPlayer) then
+        local attackerDist  = getDistance(attackerPlayer)
+        local closestTarget = getClosestLockedTarget()
+        local closestDist   = closestTarget and getDistance(closestTarget) or math.huge
+        if attackerDist <= closestDist then
+            State.Target = attackerPlayer
+        end
+    end
+
+    if not attackerPlayer or not isLockedTarget(attackerPlayer) then return end
+    if attackerPlayer == LocalPlayer then return end
+
+    if State.autoBlockEnabled then
+
+        if serviceName == "RootSwarmService" and args[1] == "Roots" then
+            local swarmChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local swarmPlayer = swarmChar and Players:GetPlayerFromCharacter(swarmChar) or nil
+            if swarmPlayer and swarmPlayer == State.Target and isInRange(State.Target, 11) then
+                rawBlockInstant(0.35)
+            end
+            return
+        end
+
+        if serviceName == "SurgingThornsService" and args[1] == "Swing" then
+            if isInRange(State.Target, 30) then
+                rawBlockInstant(1.4)
+            end
+            return
+        end
+
+        if serviceName == "BudShotService" and args[1] == "Startup" then
+            if isInRange(State.Target, 70) then
+                rawBlock(1.0)
+            end
+            return
+        end
+
+        if serviceName == "CheapShotService" and args[1] == "Start" then
+            if isInRange(State.Target, 30) then
+                rawBlock(0.6)
+            end
+            return
+        end
+
+        if serviceName == "AnkleCutterService" and args[1] == "Dash" then
+            local ankleChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local anklePlayer = ankleChar and Players:GetPlayerFromCharacter(ankleChar) or nil
+            if anklePlayer and anklePlayer == State.Target and isInRange(State.Target, 30) then
+                rawBlockInstant(0.3)
+            end
+            return
+        end
+
+        if serviceName == "FesteringStrikesService" and args[1] == "Slash" then
+            if isInRange(State.Target, 30) then
+                rawBlockInstant(1.7)
+            end
+            return
+        end
+
+        if serviceName == "DetachService" and args[1] == "Start" then
+            if isInRange(attackerPlayer, 50) then
+                rawBlock(0.7, attackerPlayer)
+            end
+            return
+        end
+
+        if serviceName == "DetachService" and args[1] == "Interp" then
+            local interpChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local interpPlayer = interpChar and Players:GetPlayerFromCharacter(interpChar) or nil
+            if interpPlayer and interpPlayer == State.Target then
+                holdF(attackerPlayer, 0.8)
+            end
+            return
+        end
+
+        if serviceName == "BackstabService" and args[1] == "Whoosh" then
+            holdF(attackerPlayer, BLOCK.NORMAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "TripService" and args[1] == "Start" then
+            holdF(attackerPlayer, BLOCK.NORMAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "ChokeholdService" and args[1] == "Start" then
+            holdF(attackerPlayer, BLOCK.NORMAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "WingThrowService" and args[1] == "Swing" then
+            rawBlockInstant(BLOCK.NORMAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "ImpetusUpdraftService" and args[1] == "Slash2" then
+            rawBlockInstant(BLOCK.NORMAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "CleverService" and args[1] == "Startup" then
+            if isInRange(attackerPlayer, 15) then
+                rawBlock(1.5, attackerPlayer)
+            end
+            return
+        end
+
+        if serviceName == "MurmurateService" and args[1] == "Start" then
+            if isInRange(attackerPlayer, 30) then
+                rawBlock(2, attackerPlayer)
+            end
+            return
+        end
+
+        if serviceName == "BirdControlService" and args[1] == "Eye" then
+            rawBlock(0.9, attackerPlayer)
+            return
+        end
+
+        if serviceName == "GarageSaleService" and args[1] == "Start" then
+            if isInRange(State.Target, 90) then
+                rawBlock(1.4)
+            end
+            return
+        end
+
+        if serviceName == "ReggieService" and args[1] == "Burn" then
+            rawBlock(1, attackerPlayer)
+            return
+        end
+
+        if serviceName == "ReggieService" and args[1] == "LitteringActivate" then
+            if tick() <= litteringReadyUntil and isInRange(State.Target, 50) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+            end
+            return
+        end
+
+        if serviceName == "CirclingService" and args[1] == "Start" then
+            local circChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local circPlayer = circChar and Players:GetPlayerFromCharacter(circChar) or nil
+            if circPlayer and circPlayer == State.Target and isInRange(State.Target, 30) then
+                circlingBlockActive = true
+                rawBlockInstant(10.0)
+            end
+            return
+        end
+
+        if serviceName == "CirclingService" and args[1] == "Charge" then
+            if circlingBlockActive then
+                circlingBlockActive = false
+                blockHoldActive = false
+                scriptHoldingF = false
+                if blockHoldConn then blockHoldConn:Disconnect(); blockHoldConn = nil end
+                game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
+                scriptHeldKeys[BLOCK.BLOCK_KEY] = nil
+                task.wait(0.1)
+                rawBlockActive = false
+            end
+            return
+        end
+
+        if args[1] == "Swing2" or args[2] == "Swing2" then
+            if isInRange(State.Target, BLOCK.NORMAL_RANGE) then
+                CAS:BindActionAtPriority("blockLeftClickSwing2", function()
+                    return Enum.ContextActionResult.Sink
+                end, false, 2001, Enum.UserInputType.MouseButton1)
+                task.delay(0.05, function()
+                    CAS:UnbindAction("blockLeftClickSwing2")
+                end)
+                holdF(attackerPlayer, BLOCK.SWING_HOLD_TIME)
+                return
+            elseif isInRange(State.Target, BLOCK.DELAYED_RANGE) then
+                local watchAttacker = attackerPlayer
+                local deadline = tick() + BLOCK.DELAYED_TIMEOUT
+                local lastDist = getDistance(watchAttacker)
+                local lastTick = tick()
+                local conn
+                conn = RunService.Heartbeat:Connect(function()
+                    if tick() >= deadline then
+                        conn:Disconnect()
+                        return
+                    end
+                    local myRoot = getMyRootPart()
+                    local theirRoot = watchAttacker.Character and watchAttacker.Character:FindFirstChild("HumanoidRootPart")
+                    if not myRoot or not theirRoot then conn:Disconnect(); return end
+
+                    local currentDist = getDistance(watchAttacker)
+                    local dt = tick() - lastTick
+                    local closingSpeed = dt > 0 and (lastDist - currentDist) / dt or 0
+                    lastDist = currentDist
+                    lastTick = tick()
+
+                    if currentDist <= BLOCK.NORMAL_RANGE or (closingSpeed >= 20 and currentDist <= BLOCK.DELAYED_RANGE) then
+                        conn:Disconnect()
+                        holdF(watchAttacker, BLOCK.SWING_HOLD_TIME)
+                    end
+                end)
+                return
+            end
+        end
+    end
+
+    if args[1] == "Chase" then
+        return
+    end
+
+    if serviceName == "CursedStrikesService" and isSwing(args[1]) then
+        if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+            holdF(attackerPlayer, BLOCK.SPECIAL_HOLD_TIME)
+            return
+        end
+    end
+
+    if State.blockEverythingEnabled then
+
+        if serviceName == "FeverBreakerService" and args[1] == "Startup" then
+            local fbChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local fbPlayer = fbChar and Players:GetPlayerFromCharacter(fbChar) or nil
+            if fbPlayer and fbPlayer == State.Target and isInRange(State.Target, 30) then
+                rawBlockInstant(0.5)
+            end
+            return
+        end
+
+        if serviceName == "RedScaleService" and args[1] == "Swing" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME, attackerPlayer)
+                if State.autoPunishEnabled and not State.punishCooldown then
+                    State.punishCooldown = true
+                    task.delay(BLOCK.SPECIAL_HOLD_TIME + 0.05, function()
+                        if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                            engageTempCharLock()
+                            tapM1()
+                            task.delay(0.2, function() releaseTempCharLock() end)
+                        end
+                        task.delay(1, function() State.punishCooldown = false end)
+                    end)
+                end
+                return
+            end
+        end
+
+        if args[1] == "Fire" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                return
+            end
+        end
+
+        if args[1] == "Startup" then
+            if serviceName == "DespairService" then
+                if isInRange(State.Target, 40) then
+                    rawBlock(1.79, attackerPlayer)
+                    if State.autoPunishEnabled and not State.punishCooldown then
+                        State.punishCooldown = true
+                        task.delay(1.79 + 0.05, function()
+                            if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                                engageTempCharLock()
+                                tapM1()
+                                task.delay(0.2, function() releaseTempCharLock() end)
+                            end
+                            task.delay(1, function() State.punishCooldown = false end)
+                        end)
+                    end
+                end
+                return
+            end
+            if serviceName == "ShutUpService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                end
+                return
+            end
+            if serviceName == "FocusStrikeService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                    if State.autoPunishEnabled and not State.punishCooldown then
+                        State.punishCooldown = true
+                        task.delay(BLOCK.SPECIAL_HOLD_TIME + 0.05, function()
+                            if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                                engageTempCharLock()
+                                tapM1()
+                                task.delay(0.2, function() releaseTempCharLock() end)
+                            end
+                            task.delay(1, function() State.punishCooldown = false end)
+                        end)
+                    end
+                end
+                return
+            end
+            if serviceName == "SacrilegiousService" then return end
+            if serviceName == "GraniteBlastService" then
+                if isInRange(State.Target, 60) then rawBlock(0.5) end
+                return
+            end
+            if serviceName == "GarudaReboundService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then rawBlock(BLOCK.SPECIAL_HOLD_TIME) end
+                return
+            end
+            if serviceName == "RisingRageService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then rawBlock(BLOCK.SPECIAL_HOLD_TIME) end
+                return
+            end
+            if serviceName == "UnsatisfiedService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then rawBlock(1.2) end
+                return
+            end
+            if serviceName == "SecondHelpingService" then return end
+            if serviceName == "AppetizerService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then rawBlock(1.5) end
+                return
+            end
+            if serviceName == "PiercingBloodService" then
+                if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then rawBlock(1.0) end
+                return
+            end
+
+            if serviceName == "RoughEnergyService" then
+                if isInRange(State.Target, 60) then
+                    rawBlockInstant(0.4)
+                    task.delay(0.1, function()
+                        fireManji()
+                    end)
+                end
+                return
+            end
+
+            if serviceName == "JudgeReachService" then
+                if isInRange(State.Target, 60) then
+                    rawBlockInstant(0.4)
+                    task.delay(0.4, function()
+                        fireManji()
+                    end)
+                end
+                return
+            end
+
+            if serviceName == "PressingChargesService" then
+                if isInRange(State.Target, 60) then
+                    holdF(attackerPlayer, 0.4)
+                    if State.autoPunishEnabled and not State.punishCooldown then
+                        State.punishCooldown = true
+                        task.delay(0.4 + 0.05, function()
+                            if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                                engageTempCharLock()
+                                tapM1()
+                                task.delay(0.2, function() releaseTempCharLock() end)
+                            end
+                            task.delay(1, function() State.punishCooldown = false end)
+                        end)
+                    end
+                end
+                return
+            end
+
+            if serviceName == "SupernovaService" or serviceName == "ManjiKickService" then
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                if pg then
+                    local sg2 = Instance.new("ScreenGui")
+                    sg2.Name            = "CounterWarning"
+                    sg2.ResetOnSpawn    = false
+                    sg2.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+                    sg2.Parent          = pg
+
+                    local bg = Instance.new("Frame")
+                    bg.Size                   = UDim2.new(1, 0, 1, 0)
+                    bg.BackgroundColor3       = Color3.fromRGB(180, 0, 0)
+                    bg.BackgroundTransparency = 0.3
+                    bg.BorderSizePixel        = 0
+                    bg.ZIndex                 = 100
+                    bg.Parent                 = sg2
+
+                    local lbl = Instance.new("TextLabel")
+                    lbl.Size                   = UDim2.new(1, 0, 1, 0)
+                    lbl.BackgroundTransparency = 1
+                    lbl.Font                   = Enum.Font.GothamBold
+                    lbl.Text                   = "COUNTER"
+                    lbl.TextColor3             = Color3.fromRGB(255, 0, 0)
+                    lbl.TextSize               = 120
+                    lbl.TextStrokeColor3       = Color3.new(0, 0, 0)
+                    lbl.TextStrokeTransparency = 0
+                    lbl.ZIndex                 = 101
+                    lbl.Parent                 = bg
+
+                    game:GetService("Debris"):AddItem(sg2, 0.8)
+                    CAS:BindActionAtPriority("blockLeftClickCounter", function()
+                        return Enum.ContextActionResult.Sink
+                    end, false, 2001, Enum.UserInputType.MouseButton1)
+                    task.delay(0.8, function()
+                        CAS:UnbindAction("blockLeftClickCounter")
+                    end)
+                end
+                return
+            end
+            return
+        end
+
+        if serviceName == "LapseBlueService" and args[1] == "BlueGrab" then
+            if isInRange(State.Target, 60) then
+                rawBlockInstant(0.3)
+                fireManji()
+            end
+            return
+        end
+
+        if serviceName == "ProjectionBreakerService" and args[1] == "Swing" then
+            local pbChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local pbPlayer = pbChar and Players:GetPlayerFromCharacter(pbChar) or nil
+            if pbPlayer and pbPlayer == State.Target and isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlockInstant(1.1)
+            end
+            return
+        end
+
+        if serviceName == "ShutterDoorService" and args[1] == "Spawn" then
+            if State.Locked and State.Target and isInRange(State.Target, 30) then
+                rawBlockInstant(BLOCK.SPECIAL_HOLD_TIME)
+            end
+            return
+        end
+
+        if serviceName == "DivineDogService" and args[1] == "Slash" then
+            rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+            return
+        end
+
+        if serviceName == "ToadService" and args[1] == "Grab" then
+            if isInRange(State.Target, 60) then
+                rawBlockInstant(0.5)
+            end
+            return
+        end
+
+        if serviceName == "ToadService" and args[1] == "Start" then
+            if isInRange(State.Target, 60) then
+                rawBlockInstant(0.5)
+            end
+            return
+        end
+
+        if serviceName == "StockpileService" and args[1] == "Create" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                return
+            end
+        end
+
+        if serviceName == "BloodEdgeService" and args[1] == "Draw" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                return
+            end
+        end
+
+        if serviceName == "SeveringPathService" and args[1] == "Start" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                if State.autoPunishEnabled and not State.punishCooldown then
+                    State.punishCooldown = true
+                    task.delay(BLOCK.SPECIAL_HOLD_TIME + 0.05, function()
+                        if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                            engageTempCharLock()
+                            tapM1()
+                            task.delay(0.2, function() releaseTempCharLock() end)
+                        end
+                        task.delay(1, function() State.punishCooldown = false end)
+                    end)
+                end
+                return
+            end
+        end
+
+        if serviceName == "VeilstepService" and args[1] == "SecondWind" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                if State.autoPunishEnabled and not State.punishCooldown then
+                    State.punishCooldown = true
+                    task.delay(BLOCK.SPECIAL_HOLD_TIME + 0.05, function()
+                        if State.Locked and State.Target and isInRange(State.Target, BLOCK.PUNISH_RANGE) then
+                            engageTempCharLock()
+                            tapM1()
+                            task.delay(0.2, function() releaseTempCharLock() end)
+                        end
+                        task.delay(1, function() State.punishCooldown = false end)
+                    end)
+                end
+                return
+            end
+        end
+
+        if serviceName == "SwiftKickService" and args[1] == "Start" then
+            if isInRange(State.Target, 40) then
+                holdF(attackerPlayer, BLOCK.NORMAL_HOLD_TIME)
+            end
+            return
+        end
+
+        if serviceName == "BruteForceService" and args[1] == "Swing" then
+            if isInRange(State.Target, 20) then
+                if State.autoPunishEnabled and not State.punishCooldown then
+                    State.punishCooldown = true
+                    task.delay(0.3, function()
+                        if State.Locked and State.Target and isInRange(State.Target, 20) then
+                            engageTempCharLock()
+                            tapM1()
+                            task.delay(0.2, function() releaseTempCharLock() end)
+                        end
+                        task.delay(1, function() State.punishCooldown = false end)
+                    end)
+                end
+                return
+            end
+        end
+
+        if serviceName == "PebbleThrowService" and args[1] == "Stomp" then
+            if isInRange(State.Target, 40) then
+                rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                return
+            end
+        end
+
+        if serviceName == "SoulfireService" and args[1] == "Morph" then
+            if isInRange(State.Target, BLOCK.SPECIAL_RANGE) then
+                rawBlock(1.0)
+                return
+            end
+        end
+
+        if serviceName == "ExtendSwingService" and args[1] == "Swing" then
+            if isInRange(State.Target, 60) then
+                rawBlockInstant(0.9)
+                fireManji()
+            end
+            return
+        end
+    end
+end
+
+--========================================================================
+-- ANGLE PREDICTION
+--========================================================================
+local function deactivateAnglePrediction()
+    if State.comboDashLock then return end
+    State.AnglePredActive   = false
+    State.AnglePredOrbitDeg = 0
+    State.AnglePredDashDir  = nil
+    anglePredLockActive     = false
+    setReticleColor(CONFIG.ReticleColor)
+end
+
+local function activateAnglePrediction(dashDirection, orbitDeg)
+    if not State.Locked or not State.Target then return end
+
+    local targetPos = getTargetPosition(State.Target)
+    local myRoot    = getMyRootPart()
+    if not targetPos or not myRoot then return end
+
+    local dist = (targetPos - myRoot.Position).Magnitude
+    if dist >= ANGLEPRED.ActivationRange then return end
+
+    local toTarget = targetPos - myRoot.Position
+    local flatFace = Vector3.new(toTarget.X, 0, toTarget.Z)
+    if flatFace.Magnitude < 0.01 then
+        local lv = myRoot.CFrame.LookVector
+        flatFace = Vector3.new(lv.X, 0, lv.Z)
+    end
+    flatFace = flatFace.Unit
+
+    local rad  = math.rad(orbitDeg)
+    local cosR = math.cos(rad)
+    local sinR = math.sin(rad)
+    local newFaceDir = Vector3.new(
+        flatFace.X * cosR - flatFace.Z * sinR,
+        0,
+        flatFace.X * sinR + flatFace.Z * cosR
+    ).Unit
+
+    if FacingAlignOrientation then FacingAlignOrientation.Enabled = false end
+
+    if State.softLockEnabled then
+        anglePredLockActive = true
+    end
+
+    myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + newFaceDir)
+
+    State.AnglePredActive   = true
+    State.AnglePredEndTime  = tick() + ANGLEPRED.ReturnTimer
+    State.AnglePredOrbitDeg = orbitDeg
+    State.AnglePredDashDir  = dashDirection
+
+    if State.softLockEnabled then
+        task.delay(ANGLEPRED.ReturnTimer + 0.05, function()
+            anglePredLockActive = false
+        end)
+    end
+
+    setReticleColor(Color3.fromRGB(255, 200, 0))
+end
+
+--========================================================================
+-- KNIT REMOTE HOOKS
+--========================================================================
+local function isKnitEffectsRemote(obj)
+    if not obj:IsA("RemoteEvent") then return false end
+    if obj.Name ~= "Effects" then return false end
+    local re       = obj.Parent
+    if not re or re.Name ~= "RE" then return false end
+    local svc      = re.Parent
+    if not svc then return false end
+    local services = svc.Parent
+    if not services or services.Name ~= "Services" then return false end
+    local knit     = services.Parent
+    return knit ~= nil and knit.Name == "Knit"
+end
+
+local function getServiceName(remote)
+    return remote.Parent.Parent.Name
+end
+
+local debugLines = {}
+local debugLabel = nil
+
+local function debugLog(msg)
+    table.insert(debugLines, 1, msg)
+    if #debugLines > 8 then table.remove(debugLines, #debugLines) end
+    if debugLabel then
+        debugLabel.Text = table.concat(debugLines, "\n")
+    end
+end
+
+local hookedRemotes = {}
+
+local function hookRemote(remote)
+    if hookedRemotes[remote] then return end
+    hookedRemotes[remote] = true
+
+    local serviceName = getServiceName(remote)
+
+    remote.OnClientEvent:Connect(function(...)
+        local args    = { ... }
+        local svcName = serviceName
+
+        if args[1] == "Chase" then
+            local attackerChar   = args[2]
+            local attackerPlayer = typeof(attackerChar) == "Instance"
+                and Players:GetPlayerFromCharacter(attackerChar) or nil
+
+            if attackerPlayer and attackerPlayer == State.Target then
+                local myRoot    = getMyRootPart()
+                local targetPos = getTargetPosition(State.Target)
+                if myRoot and targetPos then
+                    local dist = (Vector3.new(targetPos.X, myRoot.Position.Y, targetPos.Z) - myRoot.Position).Magnitude
+                    if dist <= ANGLEPRED.ForwardActivationRange then
+                        local flatFace = Vector3.new(
+                            targetPos.X - myRoot.Position.X, 0,
+                            targetPos.Z - myRoot.Position.Z)
+                        if flatFace.Magnitude < 0.01 then
+                            local lv = myRoot.CFrame.LookVector
+                            flatFace = Vector3.new(lv.X, 0, lv.Z)
+                        end
+                        flatFace = flatFace.Unit
+
+                        local rad  = math.rad(ANGLEPRED.ForwardAngle)
+                        local cosR = math.cos(rad)
+                        local sinR = math.sin(rad)
+                        local newFaceDir = Vector3.new(
+                            flatFace.X * cosR - flatFace.Z * sinR,
+                            0,
+                            flatFace.X * sinR + flatFace.Z * cosR
+                        ).Unit
+
+                        if FacingAlignOrientation then FacingAlignOrientation.Enabled = false end
+
+                        if State.softLockEnabled then
+                            anglePredLockActive = true
+                        end
+
+                        myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + newFaceDir)
+
+                        State.AnglePredActive   = true
+                        State.AnglePredEndTime  = tick() + ANGLEPRED.ForwardReturnTimer
+                        State.AnglePredOrbitDeg = ANGLEPRED.ForwardAngle
+                        State.AnglePredDashDir  = "Forward"
+                        setReticleColor(Color3.fromRGB(255, 200, 0))
+
+                        if State.softLockEnabled then
+                            task.delay(ANGLEPRED.ForwardReturnTimer + 0.05, function()
+                                anglePredLockActive = false
+                            end)
+                        end
+
+                        rawBlock(BLOCK.SPECIAL_HOLD_TIME, nil)
+                    elseif dist <= BLOCK.SPECIAL_RANGE then
+                        rawBlock(BLOCK.SPECIAL_HOLD_TIME, nil)
+                    end
+                end
+            end
+        end
+
+        do
+            local canonDir = findDirectionInArgs(...)
+            if canonDir and canonDir ~= "Back" and canonDir ~= "Forward" then
+                local attackerPlayer = nil
+                for _, v in ipairs(args) do
+                    if typeof(v) == "Instance" then
+                        if v:IsA("Player") then
+                            attackerPlayer = v; break
+                        end
+                        local fromChar = Players:GetPlayerFromCharacter(v)
+                        if fromChar then attackerPlayer = fromChar; break end
+                    end
+                end
+                if not attackerPlayer or attackerPlayer == State.Target then
+                    local orbitDeg
+                    if canonDir == "Left"  then orbitDeg =  ANGLEPRED.LeftRightAngle end
+                    if canonDir == "Right" then orbitDeg = -ANGLEPRED.LeftRightAngle end
+                    if orbitDeg then activateAnglePrediction(canonDir, orbitDeg) end
+                end
+            end
+        end
+
+        if svcName == "ReggieService" and args[1] == "LitteringStart" then
+            local litterChar = typeof(args[2]) == "Instance" and args[2] or nil
+            local litterPlayer = litterChar and Players:GetPlayerFromCharacter(litterChar) or nil
+            if litterPlayer and litterPlayer == State.Target then
+                litteringReadyUntil = tick() + 7.0
+            end
+        end
+
+        if svcName == "MovementService" and args[2] == "Dash" then
+            if State.Locked and State.Target then
+                local dasherPlayer = nil
+                if typeof(args[1]) == "Instance" and args[1]:IsA("Player") then
+                    dasherPlayer = args[1]
+                end
+                if dasherPlayer and dasherPlayer == State.Target then
+                    if isInRange(State.Target, 20) then
+                        holdF(State.Target, BLOCK.NORMAL_HOLD_TIME)
+                    end
+                end
+            end
+        end
+
+        do
+            local firingPlayer = nil
+            local foundCount = 0
+            for _, v in ipairs(args) do
+                if typeof(v) == "Instance" then
+                    local p = nil
+                    if v:IsA("Player") then
+                        p = v
+                    else
+                        local fromChar = Players:GetPlayerFromCharacter(v)
+                        if fromChar then p = fromChar end
+                        if not p and v.Parent then
+                            local fromParent = Players:GetPlayerFromCharacter(v.Parent)
+                            if fromParent then p = fromParent end
+                        end
+                    end
+                    if p and p ~= LocalPlayer then
+                        foundCount = foundCount + 1
+                        if foundCount == 1 then
+                            firingPlayer = p
+                        elseif foundCount == 2 then
+                            firingPlayer = nil
+                            break
+                        end
+                    end
+                end
+            end
+            if firingPlayer then
+                onAbilityFired(svcName, firingPlayer)
+            end
+        end
+
+        checkAttack(args, remote)
+
+        do
+            local actingPlayer = nil
+            for _, v in ipairs(args) do
+                if typeof(v) == "Instance" then
+                    if v:IsA("Player") then
+                        actingPlayer = v; break
+                    end
+                    local fromChar = Players:GetPlayerFromCharacter(v)
+                    if fromChar then actingPlayer = fromChar; break end
+                    if v.Parent then
+                        local fromParent = Players:GetPlayerFromCharacter(v.Parent)
+                        if fromParent then actingPlayer = fromParent; break end
+                    end
+                end
+            end
+
+            local argStr = svcName .. " | "
+            for _, v in ipairs(args) do
+                if typeof(v) == "Instance" then
+                    argStr = argStr .. "[" .. v.Name .. "] "
+                elseif typeof(v) == "string" then
+                    argStr = argStr .. v .. " "
+                else
+                    argStr = argStr .. tostring(v) .. " "
+                end
+            end
+            debugLog(argStr)
+
+            if actingPlayer == LocalPlayer then return end
+            if not enabled then return end
+            local target = getLockedTarget()
+            if not target then return end
+            if not actingPlayer or actingPlayer ~= target then return end
+            if actingPlayer == LocalPlayer then return end
+
+            local dist = getDistance(target)
+
+            if svcName == "HanamiService" and args[1] == "FieldStart" then
+                if dist <= 20 then
+                    hanamiLeftClickUntil = tick() + 1
+                end
+                return
+            end
+
+            if svcName == "RoachSwarmService" and args[1] == "Swarm1" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "BlackMucusService" and args[1] == "Fire" then
+                if dist <= 100 then fireManji() end
+                return
+            end
+
+            if svcName == "CrushJawService" and args[1] == "Chomp" then
+                if dist <= 15 then fireManji() end
+                return
+            end
+
+            if svcName == "CirclingService" and args[1] == "Charge" and args[3] == 2 then
+                if dist <= 15 then fireManji() end
+                return
+            end
+
+            if svcName == "CirclingService" and args[1] == "Charge" then
+                _CirclingChargeTime = tick()
+                return
+            end
+
+            if svcName == "SpeedCrashService" and args[1] == "Drive" then
+                if dist <= 30 then fireManji() end
+                return
+            end
+
+            if svcName == "HomerunService" and args[1] == "Start" then
+                if dist <= 10 then fireManji() end
+                return
+            end
+
+            if svcName == "HomerunService" and args[1] == "HitBall" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "GushingWoundService" and args[1] == "Interp" then
+                if dist <= 60 then fireManji() end
+                return
+            end
+
+            if svcName == "ShutUpService" and args[1] == "Jump" then
+                if dist <= 40 then
+                    task.delay(0.15, function() fireManji() end)
+                end
+                return
+            end
+
+            if svcName == "SacrilegiousService" and args[1] == "Startup" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "SwiftKickService" and args[1] == "Swing" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "SwiftKickService" and args[1] == "Dash" then
+                if dist <= 60 then
+                    task.delay(0.1, function()
+                        fireManji()
+                    end)
+                end
+                return
+            end
+
+            if svcName == "HandicapService" and args[2] == "Swing" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "JusticeServedService" and args[1] == "Expand" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "ResoluteSlashService" and args[1] == "EffectExplode" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "DecisiveStrikeService" and args[1] == "Windup" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "SecondHelpingService" and args[1] == "Startup" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "GarudaStabService" and args[1] == "Startup" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "MassBreakerService" and args[1] == "Startup" then
+                if dist <= 40 then fireManji() end
+                return
+            end
+
+            if svcName == "CleavingWhirlService" and args[1] == "Start" then
+                if dist <= 40 then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                    fireManji()
+                end
+                return
+            end
+
+            if svcName == "SeveranceKickService" and args[1] == "Swing" then
+                if dist <= 40 then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                    fireManji()
+                end
+                return
+            end
+
+            if svcName == "BluntCutService" and args[1] == "Start" then
+                if dist <= 40 then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                    fireManji()
+                end
+                return
+            end
+
+            if svcName == "StabilizeService" and args[1] == "Start" then
+                if dist <= 40 then
+                    rawBlock(BLOCK.SPECIAL_HOLD_TIME)
+                    fireManji()
+                end
+                return
+            end
+        end
+    end)
+end
+
+for _, container in ipairs({ ReplicatedStorage, Workspace, Players }) do
+    pcall(function()
+        for _, obj in ipairs(container:GetDescendants()) do
+            if isKnitEffectsRemote(obj) then hookRemote(obj) end
+        end
+        container.DescendantAdded:Connect(function(obj)
+            if isKnitEffectsRemote(obj) then hookRemote(obj) end
+        end)
+    end)
+end
+
+--========================================================================
+-- HANDICAP REMOTE
+--========================================================================
+local function isHandicapRemote(obj)
+    if not obj:IsA("RemoteEvent") then return false end
+    if obj.Name ~= "Effects" then return false end
+    local re = obj.Parent
+    if not re or re.Name ~= "RE" then return false end
+    local svc = re.Parent
+    if not svc or svc.Name ~= "HandicapService" then return false end
+    return true
+end
+
+local function hookHandicapRemote(remote)
+    remote.OnClientEvent:Connect(function(...)
+        local args = { ... }
+
+        if args[2] == "Collide" then return end
+
+        if args[2] == "GrabEnd" then
+            local myChar = LocalPlayer.Character
+            if not myChar then return end
+            local myRootArg = args[1]
+            if not myRootArg then return end
+            local fromChar = myRootArg.Parent
+            if not fromChar or fromChar ~= myChar then return end
+
+            local target = getLockedTarget()
+            if not target then return end
+
+            task.spawn(function()
+                engageTempCharLock()
+                while chainEnabled do
+                    RunService.Heartbeat:Wait()
+                    local mr = getMyRootPart()
+                    local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+                    if not mr or not tr then break end
+                    local toTgt = Vector3.new(
+                        tr.Position.X - mr.Position.X, 0,
+                        tr.Position.Z - mr.Position.Z)
+                    if toTgt.Magnitude > 0.01 then
+                        mr.CFrame = CFrame.new(mr.Position, mr.Position + toTgt.Unit)
+                        ControlModule.activeController.moveVector = Vector3.new(0, 0, -1)
+                    end
+                    if toTgt.Magnitude <= 3 then break end
+                end
+                ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
+
+                if not chainEnabled then return end
+
+                local tgt = getLockedTarget()
+                if not tgt then return end
+
+                fireDivergentFist()
+
+                task.delay(CHAIN_INTERVAL, function()
+                    fireDivergentFist()
+                    task.delay(0.29, function()
+                        State.AnglePredActive  = false
+                        State.AnglePredEndTime = 0
+                        comboInProgress2       = false
+                        comboManualArmed2      = false
+                        releaseTempCharLock()
+                        task.delay(0.1, function()
+                            local c = LocalPlayer.Character
+                            local h = c and c:FindFirstChildOfClass("Humanoid")
+                            if h then h.AutoRotate = true end
+                        end)
+                    end)
+                end)
+
+                chainSideDash(tgt)
+            end)
+        end
+    end)
+end
+
+for _, container in ipairs({ ReplicatedStorage, Workspace, Players }) do
+    pcall(function()
+        for _, obj in ipairs(container:GetDescendants()) do
+            if isHandicapRemote(obj) then hookHandicapRemote(obj) end
+        end
+        container.DescendantAdded:Connect(function(obj)
+            if isHandicapRemote(obj) then hookHandicapRemote(obj) end
+        end)
+    end)
+end
+
+--========================================================================
+-- LOCK / UNLOCK
+--========================================================================
+local LockOnUpdateConn = nil
+local CameraUpdateConn = nil
+local TargetWatchConns = {}
+
+local function clearTargetWatchers()
+    for _, c in ipairs(TargetWatchConns) do c:Disconnect() end
+    TargetWatchConns = {}
+end
+
+local UnlockFn, LockFn
+
+local function watchTarget(player)
+    clearTargetWatchers()
+    if CONFIG.BreakLockOnTargetLeave then
+        table.insert(TargetWatchConns, Players.PlayerRemoving:Connect(function(p)
+            if p == player then UnlockFn() end
+        end))
+    end
+    if CONFIG.BreakLockOnTargetDeath then
+        local hum = getHumanoid(player)
+        if hum then
+            table.insert(TargetWatchConns, hum.Died:Connect(UnlockFn))
+        end
+        table.insert(TargetWatchConns, player.CharacterAdded:Connect(function(nc)
+            local nh = nc:WaitForChild("Humanoid", 5)
+            if nh and State.Target == player then
+                table.insert(TargetWatchConns, nh.Died:Connect(UnlockFn))
+            end
+        end))
+        table.insert(TargetWatchConns, player.CharacterRemoving:Connect(function()
+            if State.Target == player then UnlockFn() end
+        end))
+    end
+end
+
+local function onHeartbeat()
+    if not State.Locked or not State.Target then return end
+    if State.AntiTeamingEnabled and State.softLockEnabled then
+        State.MultiTargets = (function()
+            local valid = {}
+            for _, p in ipairs(State.MultiTargets) do
+                if isValidCandidate(p) then table.insert(valid, p) end
+            end
+            return valid
+        end)()
+        if #State.MultiTargets == 0 then UnlockFn(); return end
+        State.Target = getClosestLockedTarget()
+    else
+        if not isValidCandidate(State.Target) then UnlockFn(); return end
+    end
+    if State.comboDashLock then return end
+    if State.AnglePredActive and not State.softLockEnabled then return end
+    if State.softLockEnabled and not State.tempCharLock and not State.comboDashLock then return end
+
+    local tp   = getTargetPosition(State.Target)
+    local root = getMyRootPart()
+    if not tp or not root then UnlockFn(); return end
+
+    if (tp - root.Position).Magnitude <= 1.0 then return end
+
+    if anglePredLockActive then return end
+
+    local flat = Vector3.new(tp.X - root.Position.X, 0, tp.Z - root.Position.Z)
+    if flat.Magnitude < 0.01 then
+        local lv = root.CFrame.LookVector
+        flat = Vector3.new(lv.X, 0, lv.Z)
+    end
+    root.CFrame = CFrame.new(root.Position, root.Position + flat.Unit)
+end
+
+local function onRenderStepped()
+    if not State.Locked or not State.Target then return end
+    if State.softLockEnabled and not State.AntiTeamingEnabled then
+        if State.AnglePredActive and tick() > State.AnglePredEndTime then
+            deactivateAnglePrediction()
+        end
+        return
+    end
+    if State.AntiTeamingEnabled and State.softLockEnabled then
+        State.Target = getClosestLockedTarget()
+        if not State.Target then return end
+    end
+    if Camera.CameraType ~= Enum.CameraType.Scriptable then return end
+
+    if State.AnglePredActive and tick() > State.AnglePredEndTime then
+        deactivateAnglePrediction()
+    end
+
+    local tp   = getTargetPosition(State.Target)
+    local root = getMyRootPart()
+    if not tp or not root then return end
+
+    if (tp - root.Position).Magnitude <= 1.0 then return end
+
+    local up    = Vector3.new(0, 1, 0)
+    local flat  = Vector3.new(tp.X - root.Position.X, 0, tp.Z - root.Position.Z)
+    if flat.Magnitude < 0.01 then
+        local lv = root.CFrame.LookVector
+        flat = Vector3.new(lv.X, 0, lv.Z)
+    end
+    flat = flat.Unit
+    local right = flat:Cross(up)
+    if right.Magnitude > 0.01 then right = right.Unit end
+
+    local aimPt      = tp + up * CONFIG.CameraVerticalOffset + right * CONFIG.CameraAimSideOffset
+    local basePos    = root.Position - flat * CONFIG.CameraBackDistance + up * CONFIG.CameraHeight
+    local desiredPos = basePos + right * CONFIG.CameraSideOffset + up * CONFIG.CameraUpOffset
+
+    local ray      = desiredPos - basePos
+    local finalPos = desiredPos
+    if ray.Magnitude > 0.01 then
+        local hit = Workspace:Raycast(basePos, ray, cameraRayParams)
+        if hit then
+            local d = math.max((hit.Position - basePos).Magnitude - CONFIG.CameraCollisionPadding, 0.5)
+            finalPos = basePos + ray.Unit * d
+        end
+    end
+
+    if CONFIG.BreakLockOnOutOfRange then
+        if (tp - finalPos).Magnitude > CONFIG.MaxLockDistance + CONFIG.OutOfRangeBuffer then
+            UnlockFn(); return
+        end
+    end
+
+    if (aimPt - finalPos).Magnitude > 0.01 then
+        Camera.CFrame = CFrame.new(finalPos, aimPt)
+    end
+end
+
+UnlockFn = function()
+    if not State.Locked then return end
+    if blockHoldActive then
+        blockHoldActive = false
+        scriptHoldingF = false
+        if blockHoldConn then blockHoldConn:Disconnect(); blockHoldConn = nil end
+        game:GetService("ReplicatedStorage").Knit.Knit.Services.BlockService.RE.Deactivated:FireServer()
+        scriptHeldKeys[BLOCK.BLOCK_KEY] = nil
+        rawBlockActive = false
+    end
+    State.Locked            = false
+    State.Target            = nil
+    State.MultiTargets      = {}
+    State.AnglePredActive   = false
+    State.AnglePredOrbitDeg = 0
+    State.AnglePredEndTime  = 0
+    State.AnglePredDashDir  = nil
+    State.isHolding         = false
+    State.comboDashLock     = false
+    comboInProgress         = false
+    comboManualArmed        = false
+    comboInProgress2        = false
+    comboManualArmed2       = false
+    lockingAtBack           = false
+    comboArmedPersistent    = false
+    if GUI_API.SetCombo3Armed then GUI_API.SetCombo3Armed(false) end
+
+    if LockOnUpdateConn then LockOnUpdateConn:Disconnect(); LockOnUpdateConn = nil end
+    if CameraUpdateConn then CameraUpdateConn:Disconnect(); CameraUpdateConn = nil end
+    if FacingAlignOrientation then FacingAlignOrientation.Enabled = false end
+    clearTargetWatchers()
+    destroyReticle()
+    if not State.softLockEnabled then
+        Camera.CameraType = Enum.CameraType.Custom
+        task.defer(function() Camera.CameraType = Enum.CameraType.Custom end)
+    end
+    State.tempCharLock = false
+    local c = LocalPlayer.Character
+    if c then
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if h then h.AutoRotate = true end
+    end
+
+    if GUI_API.SetStatus then GUI_API.SetStatus(false, nil) end
+end
+
+LockFn = function()
+    if State.Locked then return end
+    local target = findBestTarget()
+    if not target then return end
+    State.Locked = true
+    State.Target = target
+
+    watchTarget(target)
+    createReticleFor(target)
+
+    if LockOnUpdateConn then LockOnUpdateConn:Disconnect() end
+    LockOnUpdateConn = RunService.Heartbeat:Connect(onHeartbeat)
+    if CameraUpdateConn then CameraUpdateConn:Disconnect() end
+    CameraUpdateConn = RunService.RenderStepped:Connect(onRenderStepped)
+
+    if not State.softLockEnabled then
+        local c = LocalPlayer.Character
+        if c then
+            local h = c:FindFirstChildOfClass("Humanoid")
+            if h then h.AutoRotate = false end
+        end
+        Camera.CameraType = Enum.CameraType.Scriptable
+    end
+
+    if GUI_API.SetStatus then GUI_API.SetStatus(true, target.Name) end
+end
+
+local function ToggleLockOn()
+    if State.AntiTeamingEnabled and State.softLockEnabled then
+        local target = findBestTarget()
+        if not target then return end
+        for i, p in ipairs(State.MultiTargets) do
+            if p == target then
+                if p.Character then
+                    local root = p.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local reticle = root:FindFirstChild("LockOnReticle")
+                        if reticle then reticle:Destroy() end
+                    end
+                end
+                table.remove(State.MultiTargets, i)
+                if #State.MultiTargets == 0 then
+                    State.Locked = false
+                    State.Target = nil
+                else
+                    State.Target = getClosestLockedTarget()
+                end
+                return
+            end
+        end
+        table.insert(State.MultiTargets, target)
+        State.Locked = true
+        State.Target = getClosestLockedTarget()
+        createReticleFor(target)
+        watchTarget(target)
+        if not LockOnUpdateConn then
+            LockOnUpdateConn = RunService.Heartbeat:Connect(onHeartbeat)
+        end
+        if not CameraUpdateConn then
+            CameraUpdateConn = RunService.RenderStepped:Connect(onRenderStepped)
+        end
+        Camera.CameraType = Enum.CameraType.Scriptable
+        if GUI_API.SetStatus then GUI_API.SetStatus(true, State.Target and State.Target.Name) end
+        return
+    end
+    if State.Locked then UnlockFn() else LockFn() end
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if State.Locked then UnlockFn() end
+    task.defer(function() Camera.CameraType = Enum.CameraType.Custom end)
+end)
+
+local function watchRagdoll(char)
+    char:GetAttributeChangedSignal("Ragdoll"):Connect(function()
+        local val = char:GetAttribute("Ragdoll")
+        if val == 1 then
+            State.AnglePredActive  = true
+            State.AnglePredEndTime = math.huge
+        else
+            if not State.comboDashLock then
+                State.AnglePredActive  = false
+                State.AnglePredEndTime = 0
+            end
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    watchRagdoll(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(watchRagdoll)
+
+--========================================================================
+-- INPUT
+--========================================================================
+UserInputService.InputBegan:Connect(function(input, processed)
+    -- Invisibility keybind (works independently)
+    if not processed and not INVIS.WaitingForBind then
+        if input.KeyCode == INVIS.Key then
+            toggleInvis()
+            if GUI_API.SetInvisState then GUI_API.SetInvisState(INVIS.Enabled) end
+            return
+        end
+    end
+
+    if processed then return end
+
+    -- Flight toggle
+    if input.KeyCode == Settings.ToggleKey and Settings.FlightEnabled then
+        isFlying = not isFlying
+        return
+    end
+
+    -- Sprint toggle
+    if input.KeyCode == SprintSettings.ToggleKey and SprintSettings.Enabled then
+        isGroundSprinting = not isGroundSprinting
+        return
+    end
+
+    if State.ToggleMouseButton == nil and input.KeyCode == State.ToggleKey then
+        ToggleLockOn()
+    end
+    if input.KeyCode == ANTITEAM.ClearKey and State.AntiTeamingEnabled and State.softLockEnabled then
+        clearAllMultiTargets()
+        if GUI_API.SetStatus then GUI_API.SetStatus(false, nil) end
+    end
+
+    if (input.KeyCode == Enum.KeyCode.One or input.KeyCode == Enum.KeyCode.Two) then
+        if State.Locked and State.Target and State.softLockEnabled then
+            local snapEnd = tick() + 1.0
+            local snapConn
+            snapConn = RunService.Heartbeat:Connect(function()
+                if tick() >= snapEnd then snapConn:Disconnect(); return end
+                local myRoot = getMyRootPart()
+                local tp = getTargetPosition(State.Target)
+                if not myRoot or not tp then snapConn:Disconnect(); return end
+                if (tp - myRoot.Position).Magnitude <= 1.0 then return end
+                local flat = Vector3.new(tp.X - myRoot.Position.X, 0, tp.Z - myRoot.Position.Z)
+                if flat.Magnitude < 0.01 then return end
+                myRoot.CFrame = CFrame.new(myRoot.Position, myRoot.Position + flat.Unit)
+            end)
+        end
+    end
+
+    if (COMBO.ManualMouseButton == nil and input.KeyCode == COMBO.ManualKey)
+        or (COMBO.ManualMouseButton ~= nil and input.UserInputType == COMBO.ManualMouseButton) then
+        if not comboInProgress and State.Locked and State.Target and isInRange(State.Target, COMBO.Range) then
+            comboManualArmed = true
+        end
+    end
+
+    if input.KeyCode == COMBO3.ManualKey then
+        if State.Locked and State.Target and not comboInProgress then
+            comboArmedPersistent     = true
+            comboArmedPersistentTime = tick()
+            if GUI_API.SetCombo3Armed then GUI_API.SetCombo3Armed(true) end
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if State.ToggleMouseButton == nil then return end
+    if input.UserInputType == State.ToggleMouseButton then
+        ToggleLockOn()
+    end
+end)
+
+
+local function flushAllKeys()
+   ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
+end
+
+--========================================================================
+-- FIRE COMBO
+--========================================================================
+local function fireCombo()
+    if comboInProgress then return end
+    if not State.Locked or not State.Target then return end
+    if not isInRange(State.Target, COMBO.Range) then
+        comboManualArmed = false
+        return
+    end
+
+    local myRoot = getMyRootPart()
+    local targetPos = getTargetPosition(State.Target)
+    if not myRoot or not targetPos then return end
+
+    local theirRoot = State.Target.Character and State.Target.Character:FindFirstChild("HumanoidRootPart")
+    if not theirRoot then return end
+
+    local wasSoftLock = State.softLockEnabled
+    if wasSoftLock then
+        State.softLockEnabled = false
+        Camera.CameraType = Enum.CameraType.Scriptable
+        local c = LocalPlayer.Character
+        if c then
+            local h = c:FindFirstChildOfClass("Humanoid")
+            if h then h.AutoRotate = false end
+        end
+    end
+
+    engageTempCharLock()
+    flushAllKeys()
+
+    comboInProgress        = true
+    State.comboDashLock    = true
+    State.AnglePredActive  = true
+    State.AnglePredEndTime = math.huge
+
+    task.delay(0.05, function()
+        comboM1WindowUntil = tick() + 0.16
+        tapM1()
+    end)
+
+    local target  = getClosestLockedTarget()
+    local sideKey
+    do
+        local mr = getMyRootPart()
+        local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if mr and tr then
+            local myRight = Vector3.new(mr.CFrame.RightVector.X, 0, mr.CFrame.RightVector.Z).Unit
+            local toTarget = Vector3.new(tr.Position.X - mr.Position.X, 0, tr.Position.Z - mr.Position.Z)
+            if toTarget.Magnitude > 0.01 then
+                sideKey = (myRight:Dot(toTarget.Unit) >= 0) and Enum.KeyCode.A or Enum.KeyCode.D
+            else
+                sideKey = LastHeldSide
+            end
+        else
+            sideKey = LastHeldSide
+        end
+    end
+
+    local dashFaceActive  = true
+    local qHasFired = false
+
+    task.spawn(function()
+        while dashFaceActive do
+            RunService.Heartbeat:Wait()
+            if not dashFaceActive then break end
+            local mr = getMyRootPart()
+            local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            local tp = target and getTargetPosition(target)
+            if not mr or not tr or not tp then break end
+
+            local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
+
+            if toMe.Magnitude > 0.01 then
+                local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+                if theirFwd:Dot(toMe.Unit) < BACK_DOT then
+                    dashFaceActive         = false
+                    State.AnglePredActive  = false
+                    State.AnglePredEndTime = 0
+                    State.comboDashLock    = false
+                    break
+                end
+            end
+
+            if not qHasFired then
+                local toTgt = Vector3.new(tp.X - mr.Position.X, 0, tp.Z - mr.Position.Z)
+                if toTgt.Magnitude < 0.01 then continue end
+                toTgt = toTgt.Unit
+                local angleDeg = (sideKey == Enum.KeyCode.A) and 80 or -80
+                local rad = math.rad(angleDeg)
+                local dashDir = Vector3.new(
+                    toTgt.X * math.cos(rad) - toTgt.Z * math.sin(rad),
+                    0,
+                    toTgt.X * math.sin(rad) + toTgt.Z * math.cos(rad)
+                ).Unit
+                mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+            end
+        end
+    end)
+
+    RunService.Heartbeat:Wait()
+ ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+
+    task.spawn(function()
+        task.wait(0.08)
+
+        local dashConfirmed = false
+        local watchConn
+        local startPos
+
+        local char     = LocalPlayer.Character
+        local hum      = char and char:FindFirstChildOfClass("Humanoid")
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+
+        local DashAnimations = {
+            ["rbxassetid://75203303352791"]  = true,
+            ["rbxassetid://117223862448096"] = true,
+            ["rbxassetid://117941450906936"] = true,
+            ["rbxassetid://77705898607209"]  = true,
+        }
+
+        if animator then
+            watchConn = animator.AnimationPlayed:Connect(function(track)
+                if DashAnimations[track.Animation.AnimationId] then
+                    dashConfirmed = true
+                    startPos = getMyRootPart() and getMyRootPart().Position
+                    if watchConn then watchConn:Disconnect() end
+                end
+            end)
+        end
+
+        qHasFired = true
+        tapBtn(dashBtn)
+        task.wait(0.03)
+        task.wait(0.03)
+        ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
+
+        if not animator then return end
+
+        local watchTimeout = tick() + 0.4
+        while not dashConfirmed and tick() < watchTimeout do
+            RunService.Heartbeat:Wait()
+        end
+
+        if not dashConfirmed then
+            if watchConn then watchConn:Disconnect() end
+            return
+        end
+
+        local glideStart    = tick()
+        local glideDuration = 0.25
+
+        local glideConn
+        glideConn = RunService.Heartbeat:Connect(function()
+            local mr = getMyRootPart()
+            local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            if not mr or not tr or not startPos then glideConn:Disconnect(); return end
+
+            local alpha = math.clamp((tick() - glideStart) / glideDuration, 0, 1)
+            local t = 1 - (1 - alpha)^2
+
+            local backDir = Vector3.new(-tr.CFrame.LookVector.X, 0, -tr.CFrame.LookVector.Z).Unit
+            local endPos = Vector3.new(
+                tr.Position.X + backDir.X * 4,
+                mr.Position.Y,
+                tr.Position.Z + backDir.Z * 4
+            )
+
+            local newPos = Vector3.new(
+                startPos.X + (endPos.X - startPos.X) * t,
+                mr.Position.Y,
+                startPos.Z + (endPos.Z - startPos.Z) * t
+            )
+
+            mr.CFrame = CFrame.new(newPos, Vector3.new(tr.Position.X, newPos.Y, tr.Position.Z))
+            if alpha >= 1 then glideConn:Disconnect() end
+        end)
+    end)
+
+    task.spawn(function()
+        task.wait(0.20)
+        dashFaceActive = false
+        ControlModule.activeController.moveVector = Vector3.new(0, 0, -1)
+        task.delay(0.1, function() ControlModule.activeController.moveVector = Vector3.new(0, 0, 0) end)
+        task.delay(0.15, function()
+            State.comboDashLock    = false
+            State.AnglePredActive  = false
+            State.AnglePredEndTime = 0
+            comboInProgress        = false
+            comboManualArmed       = false
+            if wasSoftLock then
+                State.softLockEnabled = true
+                Camera.CameraType = Enum.CameraType.Custom
+                local c = LocalPlayer.Character
+                if c then local h = c:FindFirstChildOfClass("Humanoid") if h then h.AutoRotate = true end end
+            end
+            releaseTempCharLock()
+        end)
+        task.delay(0.25, function()
+            State.comboDashLock    = false
+            State.AnglePredActive  = false
+            State.AnglePredEndTime = 0
+        end)
+    end)
+
+    task.delay(2, function()
+        dashFaceActive         = false
+        State.comboDashLock    = false
+        State.AnglePredActive  = false
+        State.AnglePredEndTime = 0
+        comboInProgress        = false
+        comboManualArmed       = false
+        if wasSoftLock then
+            State.softLockEnabled = true
+            Camera.CameraType = Enum.CameraType.Custom
+            local c = LocalPlayer.Character
+            if c then local h = c:FindFirstChildOfClass("Humanoid") if h then h.AutoRotate = true end end
+        end
+        releaseTempCharLock()
+        flushAllKeys()
+    end)
+end
+
+--========================================================================
+-- FIRE COMBO CHAIN
+--========================================================================
+local function fireComboChain()
+    if comboInProgress2 then return end
+    if not State.Locked or not State.Target then return end
+    if not isInRange(State.Target, COMBO.Range) then
+        comboManualArmed2 = false
+        return
+    end
+
+    local myRoot = getMyRootPart()
+    local targetPos = getTargetPosition(State.Target)
+    if not myRoot or not targetPos then return end
+
+    local theirRoot = State.Target.Character and State.Target.Character:FindFirstChild("HumanoidRootPart")
+    if not theirRoot then return end
+
+    local alreadyAtBack = false
+    do
+        local toMe = Vector3.new(myRoot.Position.X - theirRoot.Position.X, 0, myRoot.Position.Z - theirRoot.Position.Z)
+        if toMe.Magnitude > 0.01 then
+            local theirFwd = Vector3.new(theirRoot.CFrame.LookVector.X, 0, theirRoot.CFrame.LookVector.Z).Unit
+            if theirFwd:Dot(toMe.Unit) < BACK_DOT then alreadyAtBack = true end
+        end
+    end
+
+    engageTempCharLock()
+    flushAllKeys()
+
+    comboInProgress2 = true
+
+    local target  = getClosestLockedTarget()
+    local sideKey
+    do
+        local mr = getMyRootPart()
+        local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if mr and tr then
+            local myRight = Vector3.new(mr.CFrame.RightVector.X, 0, mr.CFrame.RightVector.Z).Unit
+            local toTarget = Vector3.new(tr.Position.X - mr.Position.X, 0, tr.Position.Z - mr.Position.Z)
+            if toTarget.Magnitude > 0.01 then
+                sideKey = (myRight:Dot(toTarget.Unit) >= 0) and Enum.KeyCode.A or Enum.KeyCode.D
+            else
+                sideKey = LastHeldSide
+            end
+        else
+            sideKey = LastHeldSide
+        end
+    end
+
+    -- initial face so the dash starts pointed roughly right
+    do
+        local mr = getMyRootPart()
+        local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local tp = target and getTargetPosition(target)
+        if mr and tp and tr then
+            local toTgt = Vector3.new(tp.X - mr.Position.X, 0, tp.Z - mr.Position.Z)
+            if toTgt.Magnitude >= 0.01 then
+                toTgt = toTgt.Unit
+                local right = Vector3.new(toTgt.Z, 0, -toTgt.X)
+                local dashDir = (sideKey == Enum.KeyCode.D)
+                    and (toTgt * math.cos(math.rad(90)) + right * math.sin(math.rad(90))).Unit
+                    or  (toTgt * math.cos(math.rad(90)) - right * math.sin(math.rad(90))).Unit
+                mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+            end
+        end
+    end
+
+    -- live tracking: recalculate their back every frame until atBack triggers
+    local liveTrackConn
+    liveTrackConn = RunService.Heartbeat:Connect(function()
+        if atBackTriggered2 or not comboInProgress2 then
+            liveTrackConn:Disconnect()
+            return
+        end
+        local mr = getMyRootPart()
+        local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if not mr or not tr then liveTrackConn:Disconnect(); return end
+
+        local theirBack = Vector3.new(
+            -tr.CFrame.LookVector.X, 0,
+            -tr.CFrame.LookVector.Z
+        ).Unit
+
+        local angleDeg = (sideKey == Enum.KeyCode.A) and 45 or -45
+        local rad = math.rad(angleDeg)
+        local approachDir = Vector3.new(
+            theirBack.X * math.cos(rad) - theirBack.Z * math.sin(rad),
+            0,
+            theirBack.X * math.sin(rad) + theirBack.Z * math.cos(rad)
+        ).Unit
+
+        mr.CFrame = CFrame.new(mr.Position, mr.Position + approachDir)
+    end)
+
+    local dashFaceConn2
+    local atBackTriggered2 = false
+    dashFaceConn2 = RunService.Heartbeat:Connect(function()
+        if not comboInProgress2 then dashFaceConn2:Disconnect(); return end
+        local mr = getMyRootPart()
+        local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local tp = target and getTargetPosition(target)
+        if not mr or not tr or not tp then dashFaceConn2:Disconnect(); return end
+
+        local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
+        if toMe.Magnitude < 0.01 then return end
+        local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+        local atBack = theirFwd:Dot(toMe.Unit) < -0.4 and toMe.Magnitude >= BACK_MIN_DIST
+
+        if atBack and not atBackTriggered2 then
+            atBackTriggered2 = true
+            local holdUntil = tick() + 0.27
+            local holdConn2
+            holdConn2 = RunService.Heartbeat:Connect(function()
+                if tick() >= holdUntil then holdConn2:Disconnect(); dashFaceConn2:Disconnect(); return end
+                local mr2 = getMyRootPart()
+                local tr2 = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+                if not mr2 or not tr2 then holdConn2:Disconnect(); dashFaceConn2:Disconnect(); return end
+                local toTgt2 = Vector3.new(tr2.Position.X - mr2.Position.X, 0, tr2.Position.Z - mr2.Position.Z)
+                if toTgt2.Magnitude < 0.01 then return end
+                toTgt2 = toTgt2.Unit
+                local right2 = Vector3.new(toTgt2.Z, 0, -toTgt2.X)
+                local perpDir = (sideKey == Enum.KeyCode.A) and -right2 or right2
+                mr2.CFrame = CFrame.new(mr2.Position, mr2.Position + perpDir)
+            end)
+        end
+    end)
+
+    RunService.Heartbeat:Wait()
+   ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+    
+
+    task.spawn(function()
+        task.wait(0.08)
+
+        local dashConfirmed = false
+        local watchConn
+        local startPos
+
+        local char     = LocalPlayer.Character
+        local hum      = char and char:FindFirstChildOfClass("Humanoid")
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+
+        local DashAnimations = {
+            ["rbxassetid://75203303352791"]  = true,
+            ["rbxassetid://117223862448096"] = true,
+            ["rbxassetid://117941450906936"] = true,
+            ["rbxassetid://77705898607209"]  = true,
+        }
+
+        if animator then
+            watchConn = animator.AnimationPlayed:Connect(function(track)
+                if DashAnimations[track.Animation.AnimationId] then
+                    dashConfirmed = true
+                    startPos = getMyRootPart() and getMyRootPart().Position
+                    if watchConn then watchConn:Disconnect() end
+                end
+            end)
+        end
+
+        fireDivergentFist()
+        tapBtn(dashBtn)
+        task.wait(0.03)
+        task.wait(0.03)
+       ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
+
+        if not animator then return end
+
+        local watchTimeout = tick() + 0.4
+        while not dashConfirmed and tick() < watchTimeout do
+            RunService.Heartbeat:Wait()
+        end
+
+        if not dashConfirmed then
+            if watchConn then watchConn:Disconnect() end
+            return
+        end
+
+        local glideStart    = tick()
+        local glideDuration = 0.25
+
+        local glideConn
+        glideConn = RunService.Heartbeat:Connect(function()
+            local mr = getMyRootPart()
+            local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+            if not mr or not tr or not startPos then glideConn:Disconnect(); return end
+
+            local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
+            local stillAtBack = false
+            if toMe.Magnitude > 0.01 then
+                local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+                stillAtBack = theirFwd:Dot(toMe.Unit) < BACK_DOT
+            end
+
+            if alreadyAtBack and stillAtBack then
+                startPos = mr.Position
+                return
+            end
+
+            alreadyAtBack = false
+            local alpha = math.clamp((tick() - glideStart) / glideDuration, 0, 1)
+            local t = 1 - (1 - alpha)^2
+
+            local behindDir = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+            local endPos = Vector3.new(
+                tr.Position.X - behindDir.X * 4, mr.Position.Y,
+                tr.Position.Z - behindDir.Z * 4
+            )
+
+            local newPos = Vector3.new(
+                startPos.X + (endPos.X - startPos.X) * t,
+                mr.Position.Y,
+                startPos.Z + (endPos.Z - startPos.Z) * t
+            )
+
+            mr.CFrame = CFrame.new(newPos, Vector3.new(tr.Position.X, newPos.Y, tr.Position.Z))
+            if alpha >= 1 then glideConn:Disconnect() end
+        end)
+    end)
+
+    task.spawn(function()
+        task.wait(0.20)
+        task.delay(CHAIN_INTERVAL, function()
+            fireDivergentFist()
+            task.delay(0.29, function()
+                State.AnglePredActive  = false
+                State.AnglePredEndTime = 0
+                comboInProgress2       = false
+                comboManualArmed2      = false
+                releaseTempCharLock()
+                task.delay(0.1, function()
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChildOfClass("Humanoid")
+                    if h then h.AutoRotate = true end
+                end)
+            end)
+        end)
+    end)
+
+    task.delay(2, function()
+        State.AnglePredActive  = false
+        State.AnglePredEndTime = 0
+        comboInProgress2       = false
+        comboManualArmed2      = false
+        releaseTempCharLock()
+        flushAllKeys()
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h then h.AutoRotate = true end
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if not State.Locked or not State.Target then
+        if comboArmedPersistent then
+            comboArmedPersistent = false
+            if GUI_API.SetCombo3Armed then GUI_API.SetCombo3Armed(false) end
+        end
+        return
+    end
+
+    if comboArmedPersistent then
+        if tick() - comboArmedPersistentTime >= COMBO_PERSISTENT_TIMEOUT then
+            comboArmedPersistent = false
+            if GUI_API.SetCombo3Armed then GUI_API.SetCombo3Armed(false) end
+        elseif not comboInProgress and isInRange(State.Target, COMBO.Range) then
+            comboArmedPersistent = false
+            if GUI_API.SetCombo3Armed then GUI_API.SetCombo3Armed(false) end
+            fireCombo()
+        end
+    end
+
+    if not isInRange(State.Target, COMBO.Range) then
+        comboManualArmed  = false
+        comboManualArmed2 = false
+        return
+    end
+    if not comboInProgress and comboManualArmed then
+        comboManualArmed = false
+        fireCombo()
+    end
+    if not comboInProgress2 and comboManualArmed2 then
+        comboManualArmed2 = false
+        fireComboChain()
+    end
+end)
+
+local leftClickBlocked = false
+local hanamiLeftClickUntil = 0
+
+local M1_SUPPRESS_RANGE = 8
+
+local function updateLeftClickBlock()
+    if not State.Locked or not State.Target then
+        if leftClickBlocked then
+            CAS:UnbindAction("blockLeftClick")
+            leftClickBlocked = false
+        end
+        return
+    end
+
+    local inComboWindow = tick() <= comboM1WindowUntil
+
+    local tooFar = (not inComboWindow) and (not isInRange(State.Target, M1_SUPPRESS_RANGE))
+
+    local isBlocking = false
+    local targetChar = State.Target.Character
+    if targetChar then
+        local info = targetChar:FindFirstChild("Info")
+        if info then
+            local blockVal = nil
+            for _, v in ipairs(info:GetChildren()) do
+                if v.Name:sub(1, 5) == "Block" then
+                    blockVal = v
+                    break
+                end
+            end
+            isBlocking = (blockVal ~= nil and blockVal.Value ~= nil) and (not inComboWindow)
+        end
+    end
+
+    local hanamiBlocking = tick() < hanamiLeftClickUntil
+    local atTargetsBack = isAtBack(State.Target) and isInRange(State.Target, M1_SUPPRESS_RANGE)
+    local shouldBlock = (tooFar or isBlocking or hanamiBlocking) and not atTargetsBack
+
+    if shouldBlock and not leftClickBlocked then
+        leftClickBlocked = true
+        CAS:BindActionAtPriority("blockLeftClick", function()
+            return Enum.ContextActionResult.Sink
+        end, false, 2000, Enum.UserInputType.MouseButton1)
+    elseif not shouldBlock and leftClickBlocked then
+        leftClickBlocked = false
+        CAS:UnbindAction("blockLeftClick")
+    end
+end
+
+RunService.Heartbeat:Connect(updateLeftClickBlock)
+
+local function setupAnimationWatcher(character)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    local animator = humanoid and humanoid:WaitForChild("Animator", 5)
+    if not animator then return end
+    animator.AnimationPlayed:Connect(function(track)
+        local animId = track.Animation.AnimationId
+        local delayTime = AnimationTriggers[animId]
+        if not delayTime and StraightAnimations[animId] then delayTime = 0.19 end
+        if delayTime then
+            task.delay(delayTime, function()
+                if humanoid.Health > 0 then
+                    fireDivergentFist()
+                end
+            end)
+        end
+    end)
+end
+
+if LocalPlayer.Character then setupAnimationWatcher(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupAnimationWatcher)
+
+--========================================================================
+-- FLIGHT PHYSICS SETUP
+--========================================================================
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local humanoid  = character:WaitForChild("Humanoid")
+local rootPart  = character:WaitForChild("HumanoidRootPart")
+
+local bodyVelocity = Instance.new("BodyVelocity")
+bodyVelocity.Name      = "ViltrumiteFlightVelocity"
+bodyVelocity.MaxForce  = Vector3.new(0, 0, 0)
+bodyVelocity.Velocity  = Vector3.new(0, 0, 0)
+
+local bodyGyro = Instance.new("BodyGyro")
+bodyGyro.Name      = "ViltrumiteFlightGyro"
+bodyGyro.MaxTorque = Vector3.new(0, 0, 0)
+bodyGyro.P         = 3000
+bodyGyro.D         = 200
+
+local joints = {}
+
+local function collectJoints(char)
+    joints = {}
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if not torso then return end
+    joints.Neck         = torso:FindFirstChild("Neck") or (char:FindFirstChild("Head") and char.Head:FindFirstChild("Neck"))
+    joints.RootJoint    = torso:FindFirstChild("RootJoint") or (char:FindFirstChild("LowerTorso") and char.LowerTorso:FindFirstChild("Root"))
+    joints.LeftShoulder  = torso:FindFirstChild("LeftShoulder")  or torso:FindFirstChild("Left Shoulder")
+    joints.RightShoulder = torso:FindFirstChild("RightShoulder") or torso:FindFirstChild("Right Shoulder")
+    joints.LeftHip       = (char:FindFirstChild("LowerTorso") and char.LowerTorso:FindFirstChild("LeftHip"))  or torso:FindFirstChild("Left Hip")
+    joints.RightHip      = (char:FindFirstChild("LowerTorso") and char.LowerTorso:FindFirstChild("RightHip")) or torso:FindFirstChild("Right Hip")
+    joints.Waist         = torso:FindFirstChild("Waist")
+end
+
+local originalC0 = {}
+local function cacheOriginalC0()
+    originalC0 = {}
+    for name, joint in pairs(joints) do
+        if joint then originalC0[name] = joint.C0 end
+    end
+end
+
+collectJoints(character)
+cacheOriginalC0()
+
+local suppressingAnimations = false
+local function suppressAnimationsThisFrame() end
+
+local WALK_RUN_ANIMS = {
+    ["rbxassetid://96489184596023"]                              = true,
+    ["http://www.roblox.com/asset/?id=77705898607209"]           = true,
+    ["http://www.roblox.com/asset/?id=117941450906936"]          = true,
+    ["http://www.roblox.com/asset/?id=140491244934559"]          = true,
+}
+
+local walkSuppressConn = nil
+
+local function startSuppressingAnimations()
+    local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+    if walkSuppressConn then walkSuppressConn:Disconnect() end
+    walkSuppressConn = animator.AnimationPlayed:Connect(function(track)
+        if WALK_RUN_ANIMS[track.Animation.AnimationId] then
+            track:Stop(0)
+        end
+    end)
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        if WALK_RUN_ANIMS[track.Animation.AnimationId] then
+            track:Stop(0)
+        end
+    end
+end
+
+local function stopSuppressingAnimations()
+    if walkSuppressConn then
+        walkSuppressConn:Disconnect()
+        walkSuppressConn = nil
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    character  = newChar
+    humanoid   = character:WaitForChild("Humanoid")
+    rootPart   = character:WaitForChild("HumanoidRootPart")
+    isFlying   = false
+    bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyGyro.MaxTorque    = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent   = nil
+    bodyGyro.Parent       = nil
+    collectJoints(character)
+    cacheOriginalC0()
+end)
+
+
+local heldKeys = {
+    W = false, A = false, S = false, D = false,
+    Up = false, Down = false, Sprint = false,
+}
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local key = input.KeyCode
+        if key == Enum.KeyCode.W     then heldKeys.W     = true end
+        if key == Enum.KeyCode.A     then heldKeys.A     = true end
+        if key == Enum.KeyCode.S     then heldKeys.S     = true end
+        if key == Enum.KeyCode.D     then heldKeys.D     = true end
+        if key == Enum.KeyCode.Space then heldKeys.Up    = true end
+        if key == Enum.KeyCode.LeftControl or key == Enum.KeyCode.RightControl then heldKeys.Down   = true end
+        if key == Enum.KeyCode.LeftShift   or key == Enum.KeyCode.RightShift   then heldKeys.Sprint = true end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local key = input.KeyCode
+        if key == Enum.KeyCode.W     then heldKeys.W     = false end
+        if key == Enum.KeyCode.A     then heldKeys.A     = false end
+        if key == Enum.KeyCode.S     then heldKeys.S     = false end
+        if key == Enum.KeyCode.D     then heldKeys.D     = false end
+        if key == Enum.KeyCode.Space then heldKeys.Up    = false end
+        if key == Enum.KeyCode.LeftControl or key == Enum.KeyCode.RightControl then heldKeys.Down   = false end
+        if key == Enum.KeyCode.LeftShift   or key == Enum.KeyCode.RightShift   then heldKeys.Sprint = false end
+    end
+end)
+
+
+local function playLaunchEffect()
+    if not rootPart then return end
+    local attachment = Instance.new("Attachment")
+    attachment.Name   = "ViltrumiteLaunchAttachment"
+    attachment.Parent = rootPart
+
+    local burst = Instance.new("ParticleEmitter")
+    burst.Texture      = "rbxasset://textures/particles/sparks_main.dds"
+    burst.Color        = ColorSequence.new(Color3.fromRGB(170, 130, 255), Color3.fromRGB(80, 60, 160))
+    burst.Lifetime     = NumberRange.new(0.3, 0.6)
+    burst.Speed        = NumberRange.new(20, 35)
+    burst.SpreadAngle  = Vector2.new(180, 180)
+    burst.Rate         = 0
+    burst.Acceleration = Vector3.new(0, -40, 0)
+    burst.Size         = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.2), NumberSequenceKeypoint.new(1, 0) })
+    burst.Parent       = attachment
+    burst:Emit(40)
+
+    local ring = Instance.new("Part")
+    ring.Shape       = Enum.PartType.Cylinder
+    ring.Material    = Enum.Material.Neon
+    ring.Color       = Color3.fromRGB(150, 110, 255)
+    ring.Anchored    = true
+    ring.CanCollide  = false
+    ring.Size        = Vector3.new(0.2, 1, 1)
+    ring.CFrame      = rootPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
+    ring.Transparency = 0.2
+    ring.Parent      = workspace
+    TweenService:Create(ring, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = Vector3.new(0.2, 14, 14), Transparency = 1,
+    }):Play()
+    task.delay(0.5, function() ring:Destroy(); attachment:Destroy() end)
+end
+
+
+local function setupFlightObjects()
+    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyGyro.MaxTorque    = Vector3.new(math.huge, math.huge, math.huge)
+    bodyGyro.CFrame       = rootPart.CFrame
+    if not bodyVelocity.Parent then bodyVelocity.Parent = rootPart end
+    if not bodyGyro.Parent     then bodyGyro.Parent     = rootPart end
+end
+
+local function teardownFlightObjects()
+    bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyGyro.MaxTorque    = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent   = nil
+    bodyGyro.Parent       = nil
+end
+
+local savedAutoRotate = nil
+
+local COMPETING_MOVER_CLASSES = {
+    "BodyPosition","BodyVelocity","BodyGyro","BodyForce",
+    "BodyAngularVelocity","AlignPosition","AlignOrientation",
+    "LinearVelocity","VectorForce",
+}
+local OUR_OBJECT_NAMES = {
+    ViltrumiteFlightVelocity = true,
+    ViltrumiteFlightGyro     = true,
+}
+
+local function neutralizeCompetingMovers()
+    for _, className in ipairs(COMPETING_MOVER_CLASSES) do
+        for _, obj in ipairs(rootPart:GetChildren()) do
+            if obj.ClassName == className and not OUR_OBJECT_NAMES[obj.Name] then
+                if obj:IsA("BodyPosition") or obj:IsA("BodyForce") or obj:IsA("BodyVelocity") then
+                    pcall(function() obj.MaxForce = Vector3.new(0,0,0) end)
+                elseif obj:IsA("BodyGyro") or obj:IsA("BodyAngularVelocity") then
+                    pcall(function() obj.MaxTorque = Vector3.new(0,0,0) end)
+                elseif obj:IsA("AlignPosition") or obj:IsA("AlignOrientation") then
+                    pcall(function() obj.Enabled = false end)
+                elseif obj:IsA("LinearVelocity") then
+                    pcall(function() obj.MaxForce = 0 end)
+                elseif obj:IsA("VectorForce") then
+                    pcall(function() obj.Force = Vector3.new(0,0,0) end)
+                end
+            end
+        end
+    end
+end
+
+local function forceFlightStateThisFrame()
+    if not rootPart then return end
+    if rootPart.Anchored then rootPart.Anchored = false end
+    if humanoid.AutoRotate then
+        if savedAutoRotate == nil then savedAutoRotate = humanoid.AutoRotate end
+        humanoid.AutoRotate = false
+    end
+    if not humanoid.PlatformStand then humanoid.PlatformStand = true end
+    if not bodyVelocity or not bodyVelocity.Parent or not bodyGyro or not bodyGyro.Parent then
+        setupFlightObjects()
+    end
+    neutralizeCompetingMovers()
+end
+
+
+local poseAlpha = 0
+
+local function applyFlyingPose(dt, speedRatio, hasInput)
+    local targetAlpha = hasInput and 1 or 0.85
+    poseAlpha = poseAlpha + (targetAlpha - poseAlpha) * math.clamp(dt * 7, 0, 1)
+
+    if hasInput then
+        if joints.LeftShoulder  and originalC0.LeftShoulder  then joints.LeftShoulder.C0  = originalC0.LeftShoulder  * CFrame.Angles(0, 0,  poseAlpha * math.rad(30)) end
+        if joints.RightShoulder and originalC0.RightShoulder then joints.RightShoulder.C0 = originalC0.RightShoulder * CFrame.Angles(0, 0, -poseAlpha * math.rad(30)) end
+        if joints.LeftHip  and originalC0.LeftHip  then joints.LeftHip.C0  = originalC0.LeftHip  * CFrame.Angles(-poseAlpha * math.rad(8), 0, -poseAlpha * math.rad(5)) end
+        if joints.RightHip and originalC0.RightHip then joints.RightHip.C0 = originalC0.RightHip * CFrame.Angles(-poseAlpha * math.rad(8), 0,  poseAlpha * math.rad(5)) end
+    else
+        if joints.LeftShoulder  and originalC0.LeftShoulder  then joints.LeftShoulder.C0  = originalC0.LeftShoulder  * CFrame.Angles(math.rad(55), 0,  math.rad(20)) end
+        if joints.RightShoulder and originalC0.RightShoulder then joints.RightShoulder.C0 = originalC0.RightShoulder * CFrame.Angles(math.rad(55), 0, -math.rad(20)) end
+        if joints.LeftHip  and originalC0.LeftHip  then joints.LeftHip.C0  = originalC0.LeftHip  * CFrame.Angles(0, 0, -math.rad(5)) end
+        if joints.RightHip and originalC0.RightHip then joints.RightHip.C0 = originalC0.RightHip * CFrame.Angles(0, 0,  math.rad(5)) end
+    end
+    if joints.Waist and originalC0.Waist then joints.Waist.C0 = originalC0.Waist * CFrame.Angles( poseAlpha * math.rad(4),   0, 0) end
+    if joints.Neck  and originalC0.Neck  then joints.Neck.C0  = originalC0.Neck  * CFrame.Angles(-poseAlpha * math.rad(20),  0, 0) end
+end
+
+local function snapPoseToNeutral()
+    poseAlpha = 0
+    for name, joint in pairs(joints) do
+        if joint and originalC0[name] then joint.C0 = originalC0[name] end
+    end
+end
+
+
+local normalWalkSpeed    = humanoid.WalkSpeed
+local wasGroundSprinting = false
+
+local function applySprintStateThisFrame()
+    if humanoid.WalkSpeed ~= SprintSettings.GroundSpeed then
+        humanoid.WalkSpeed = SprintSettings.GroundSpeed
+    end
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if not SprintSettings.Enabled then isGroundSprinting = false end
+    if isFlying and isGroundSprinting then isGroundSprinting = false end
+    if not humanoid or not humanoid.Parent then return end
+
+    if isGroundSprinting ~= wasGroundSprinting then
+        if isGroundSprinting then
+            normalWalkSpeed = humanoid.WalkSpeed
+            if normalWalkSpeed == SprintSettings.GroundSpeed then normalWalkSpeed = 16 end
+        else
+            humanoid.WalkSpeed = normalWalkSpeed
+        end
+        wasGroundSprinting = isGroundSprinting
+    end
+
+    if isGroundSprinting then applySprintStateThisFrame() end
+end)
+
+humanoid.Died:Connect(function() isGroundSprinting = false end)
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    local newHumanoid = newChar:WaitForChild("Humanoid")
+    normalWalkSpeed      = newHumanoid.WalkSpeed
+    wasGroundSprinting   = false
+    isGroundSprinting    = false
+end)
+
+
+local wasFlying = false
+
+RunService.RenderStepped:Connect(function(dt)
+    if not Settings.FlightEnabled then isFlying = false end
+    if isFlying and character and not character:FindFirstChild("HumanoidRootPart") then isFlying = false end
+
+    if isFlying ~= wasFlying then
+        if isFlying then
+            rootPart.Anchored       = false
+            humanoid.PlatformStand  = true
+            humanoid.CameraOffset   = Vector3.new(0, 20, 0)
+            startSuppressingAnimations()
+            neutralizeCompetingMovers()
+            setupFlightObjects()
+            playLaunchEffect()
+        else
+            stopSuppressingAnimations()
+            humanoid.CameraOffset  = Vector3.new(0, 0, 0)
+            humanoid.PlatformStand = false
+            if savedAutoRotate ~= nil then
+                humanoid.AutoRotate = savedAutoRotate
+                savedAutoRotate = nil
+            end
+            snapPoseToNeutral()
+            bodyVelocity.MaxForce = Vector3.new(0, 0, 0)
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyGyro.MaxTorque    = Vector3.new(0, 0, 0)
+            currentVelocity = Vector3.new()
+        end
+        wasFlying = isFlying
+    end
+
+    if not isFlying then return end
+
+    forceFlightStateThisFrame()
+    if not bodyVelocity or not bodyGyro then return end
+
+    local camCFrame  = Camera.CFrame
+    local lookVector = camCFrame.LookVector
+    local flatRight  = Vector3.new(camCFrame.RightVector.X, 0, camCFrame.RightVector.Z)
+    if flatRight.Magnitude > 0.001 then flatRight = flatRight.Unit else flatRight = Vector3.new(1, 0, 0) end
+
+    local moveDir = Vector3.new()
+    if heldKeys.W then moveDir += lookVector end
+    if heldKeys.S then moveDir -= lookVector end
+    if heldKeys.D then moveDir += flatRight  end
+    if heldKeys.A then moveDir -= flatRight  end
+
+    local hasHorizontalInput = moveDir.Magnitude > 0.001
+    if hasHorizontalInput then moveDir = moveDir.Unit end
+
+    local verticalDir = 0
+    if heldKeys.Up   then verticalDir += 1 end
+    if heldKeys.Down then verticalDir -= 1 end
+
+    local hasAnyInput = hasHorizontalInput or verticalDir ~= 0
+    local speed = Settings.BaseSpeed
+    if heldKeys.Sprint and hasAnyInput then speed = speed * Settings.SprintMultiplier end
+
+    local targetVelocity = (moveDir * speed) + Vector3.new(0, verticalDir * Settings.VerticalSpeed, 0)
+    local alpha = math.clamp(Settings.Acceleration * dt, 0, 1)
+    currentVelocity       = currentVelocity:Lerp(targetVelocity, alpha)
+    bodyVelocity.Velocity = currentVelocity
+
+    local maxSpeed  = Settings.BaseSpeed * Settings.SprintMultiplier
+    local speedRatio = math.clamp(currentVelocity.Magnitude / maxSpeed, 0, 1)
+    local diveRatio  = math.clamp(speedRatio / 0.5, 0, 1)
+    local pitchAngle = diveRatio * math.rad(Settings.MaxDiveDegrees)
+
+    local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+    if flatLook.Magnitude < 0.001 then
+        flatLook = Vector3.new(rootPart.CFrame.LookVector.X, 0, rootPart.CFrame.LookVector.Z)
+    end
+    flatLook = flatLook.Unit
+
+    local lateralAmount = flatRight:Dot(moveDir)
+    local bankAngle     = math.rad(Settings.MaxTiltDegrees) * lateralAmount
+
+    local newForward = (flatLook * math.cos(pitchAngle)) + (Vector3.new(0, -1, 0) * math.sin(pitchAngle))
+    newForward = newForward.Unit
+    local newUp = (Vector3.new(0, 1, 0) * math.cos(pitchAngle)) + (flatLook * math.sin(pitchAngle))
+    newUp = newUp.Unit
+    local rightAxis = newForward:Cross(newUp).Unit
+
+    if bankAngle ~= 0 then
+        local cosB, sinB = math.cos(bankAngle), math.sin(bankAngle)
+        local rolledUp    = (newUp * cosB)    + (rightAxis * sinB)
+        local rolledRight = (rightAxis * cosB) - (newUp * sinB)
+        newUp     = rolledUp.Unit
+        rightAxis = rolledRight.Unit
+    end
+
+    bodyGyro.CFrame = CFrame.fromMatrix(rootPart.Position, rightAxis, newUp, -newForward)
+    applyFlyingPose(dt, speedRatio, hasAnyInput)
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not isFlying then return end
+    Camera.CFrame = Camera.CFrame + Vector3.new(0, 2, 0)
+end)
+
+
+
+
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" then
+        local selfName   = tostring(self.Name)
+        local parentName = self.Parent and self.Parent.Parent and tostring(self.Parent.Parent.Name) or ""
+        if selfName == "Activated" and parentName == "DivergentFistService" then
+            if bfChainEnabled
+                and not comboInProgress2
+                and State.Locked
+                and State.Target
+                and isInRange(State.Target, COMBO.Range)
+            then
+                comboManualArmed2 = true
+                local c = LocalPlayer.Character
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if h then h.AutoRotate = false end
+            end
+        end
+    end
+    return oldNamecall(self, ...)
+end))
+
+--[[
+    SCRIPTIFY HUB — MOBILE GUI REPLACEMENT
+    Drop this in to replace everything from "local function buildDashWidget()"
+    through to the final print() at the bottom of your script.
+    Keep all code above that line exactly as-is.
+    
+    Changes vs. the original:
+    • Full-width bottom-sheet panel (no fixed 580px float)
+    • Bottom tab bar with large thumb-friendly icons
+    • 48px+ touch targets on every toggle / button
+    • Sheet slides up/down instead of minimize button
+    • Floating LOCK and DASH circles are larger (80px)
+    • Dash-range indicator is a compact top banner
+    • Fonts and labels sized for phone screens
+]]
+
+-- =========================================================
+-- DASH RANGE INDICATOR (top banner, replaces floating widget)
+-- =========================================================
+local dashRangeIndicatorEnabled = true
+local floatingDashWidget        = nil  -- kept for compatibility
+
+local function buildDashWidget()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+    local sg = Instance.new("ScreenGui")
+    sg.Name           = "DashIndicatorGui"
+    sg.ResetOnSpawn   = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent         = pg
+    floatingDashWidget = sg
+
+    -- thin banner pinned to top-center
+    local banner = Instance.new("Frame")
+    banner.Size             = UDim2.new(0, 200, 0, 38)
+    banner.Position         = UDim2.new(0.5, -100, 0, 10)
+    banner.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+    banner.BorderSizePixel  = 0
+    banner.ZIndex           = 12
+    banner.Parent           = sg
+    Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 10)
+
+    local bannerStroke = Instance.new("UIStroke")
+    bannerStroke.Thickness = 1.5
+    bannerStroke.Color     = Color3.fromRGB(60, 60, 70)
+    bannerStroke.Parent    = banner
+
+    local bannerLbl = Instance.new("TextLabel")
+    bannerLbl.Size               = UDim2.new(1, 0, 1, 0)
+    bannerLbl.BackgroundTransparency = 1
+    bannerLbl.Font               = Enum.Font.GothamBold
+    bannerLbl.Text               = "DON'T DASH"
+    bannerLbl.TextColor3         = Color3.fromRGB(200, 60, 60)
+    bannerLbl.TextSize           = 14
+    bannerLbl.Parent             = banner
+
+    RunService.RenderStepped:Connect(function()
+        if not dashRangeIndicatorEnabled then
+            sg.Enabled = false
+            return
+        end
+        sg.Enabled = true
+        if State.Locked and State.Target and isInRange(State.Target, COMBO.Range) then
+            bannerLbl.Text       = "✦  DASH"
+            bannerLbl.TextColor3 = Color3.fromRGB(60, 210, 110)
+            bannerStroke.Color   = Color3.fromRGB(60, 210, 110)
+        else
+            bannerLbl.Text       = "DON'T DASH"
+            bannerLbl.TextColor3 = Color3.fromRGB(200, 60, 60)
+            bannerStroke.Color   = Color3.fromRGB(60, 60, 70)
+        end
+    end)
+end
+
+-- =========================================================
+-- OPENING ANIMATION
+-- =========================================================
+local function playOpeningAnimation(onComplete)
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+
+    local introGui = Instance.new("ScreenGui")
+    introGui.Name           = "ScriptifyHubIntro"
+    introGui.ResetOnSpawn   = false
+    introGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    introGui.Parent         = pg
+
+    local scanline = Instance.new("Frame")
+    scanline.Size                   = UDim2.new(1, 0, 0, 2)
+    scanline.Position               = UDim2.new(0, 0, 0, 0)
+    scanline.BackgroundColor3       = Color3.fromRGB(180, 30, 30)
+    scanline.BackgroundTransparency = 0.3
+    scanline.BorderSizePixel        = 0
+    scanline.ZIndex                 = 102
+    scanline.Parent                 = introGui
+
+    local mainLbl = Instance.new("TextLabel")
+    mainLbl.Size               = UDim2.new(1, 0, 0, 70)
+    mainLbl.Position           = UDim2.new(0, 0, 0.42, 0)
+    mainLbl.BackgroundTransparency = 1
+    mainLbl.Font               = Enum.Font.GothamBold
+    mainLbl.Text               = ""
+    mainLbl.TextColor3         = Color3.fromRGB(220, 220, 220)
+    mainLbl.TextSize           = 38
+    mainLbl.ZIndex             = 103
+    mainLbl.Parent             = introGui
+
+    local accentLine = Instance.new("Frame")
+    accentLine.Size             = UDim2.new(0, 0, 0, 2)
+    accentLine.Position         = UDim2.new(0.5, 0, 0.56, 0)
+    accentLine.AnchorPoint      = Vector2.new(0.5, 0)
+    accentLine.BackgroundColor3 = Color3.fromRGB(180, 30, 30)
+    accentLine.BorderSizePixel  = 0
+    accentLine.ZIndex           = 103
+    accentLine.Parent           = introGui
+
+    local glitchChars = {"SCR1PTIFY","SCRI▓TIFY","S█RIPTIFY HUB","SCRIPTIFY H#B","▓CRIPTIFY HUB","SCRIPTIFY ▓UB","SCRIPTIFY HUB"}
+
+    task.spawn(function()
+        local sweepDur   = 0.5
+        local sweepStart = tick()
+        while tick() - sweepStart < sweepDur do
+            local alpha = (tick() - sweepStart) / sweepDur
+            scanline.Position = UDim2.new(0, 0, alpha, 0)
+            RunService.Heartbeat:Wait()
+        end
+        scanline.Visible = false
+        task.wait(0.08)
+
+        for _, g in ipairs(glitchChars) do
+            mainLbl.Text = g
+            task.wait(0.06)
+        end
+        mainLbl.Text = "SCRIPTIFY HUB"
+
+        local lineDur   = 0.28
+        local lineStart = tick()
+        while tick() - lineStart < lineDur do
+            local alpha = math.clamp((tick() - lineStart) / lineDur, 0, 1)
+            local ease  = 1 - (1 - alpha)^3
+            accentLine.Size = UDim2.new(0, math.floor(260 * ease), 0, 2)
+            RunService.Heartbeat:Wait()
+        end
+        accentLine.Size = UDim2.new(0, 260, 0, 2)
+        task.wait(0.28)
+
+        local fadeDur   = 0.35
+        local fadeStart = tick()
+        while tick() - fadeStart < fadeDur do
+            local alpha = math.clamp((tick() - fadeStart) / fadeDur, 0, 1)
+            mainLbl.TextTransparency          = alpha
+            accentLine.BackgroundTransparency = alpha
+            RunService.Heartbeat:Wait()
+        end
+
+        introGui:Destroy()
+        if onComplete then onComplete() end
+    end)
+end
+
+-- =========================================================
+-- MAIN GUI BUILD
+-- =========================================================
+local function buildGui()
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+
+    -- ── Palette ──────────────────────────────────────────
+    local BG_SHEET   = Color3.fromRGB(14, 14, 18)     -- sheet background
+    local BG_CARD    = Color3.fromRGB(22, 22, 28)     -- card / row bg
+    local BG_TAB     = Color3.fromRGB(10, 10, 14)     -- tab bar bg
+    local ACCENT     = Color3.fromRGB(180, 25, 25)    -- red accent
+    local ACCENT2    = Color3.fromRGB(220, 50, 50)    -- lighter red
+    local ON_GREEN   = Color3.fromRGB(55, 200, 105)   -- toggle on
+    local OFF_GRAY   = Color3.fromRGB(55, 55, 65)     -- toggle off
+    local TEXT_PRI   = Color3.fromRGB(225, 222, 222)
+    local TEXT_SEC   = Color3.fromRGB(120, 118, 128)
+    local BORDER     = Color3.fromRGB(38, 38, 50)
+
+    -- ── Root ScreenGui ───────────────────────────────────
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name           = "ScriptifyHub"
+    screenGui.ResetOnSpawn   = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.IgnoreGuiInset = true
+    screenGui.Parent         = pg
+
+    -- ── Sheet (bottom panel) ─────────────────────────────
+    -- Starts collapsed; user pulls up via the handle pill
+    local SHEET_FULL   = 560   -- px tall when expanded
+    local SHEET_PEEK   = 54    -- px tall when collapsed (just tab bar)
+    local sheetOpen    = false
+
+    local sheet = Instance.new("Frame")
+    sheet.Name             = "Sheet"
+    sheet.Size             = UDim2.new(1, 0, 0, SHEET_PEEK)
+    sheet.Position         = UDim2.new(0, 0, 1, -SHEET_PEEK)
+    sheet.BackgroundColor3 = BG_SHEET
+    sheet.BorderSizePixel  = 0
+    sheet.ZIndex           = 15
+    sheet.ClipsDescendants = true
+    sheet.Parent           = screenGui
+
+    local sheetCorner = Instance.new("UICorner")
+    sheetCorner.CornerRadius = UDim.new(0, 16)
+    sheetCorner.Parent       = sheet
+
+    local sheetStroke = Instance.new("UIStroke")
+    sheetStroke.Color     = Color3.fromRGB(50, 50, 65)
+    sheetStroke.Thickness = 1.2
+    sheetStroke.Parent    = sheet
+
+    -- Drag handle / tap-to-open pill
+    local handleBar = Instance.new("TextButton")
+    handleBar.Name             = "HandleBar"
+    handleBar.Size             = UDim2.new(1, 0, 0, 40)
+    handleBar.Position         = UDim2.new(0, 0, 0, 0)
+    handleBar.BackgroundTransparency = 1
+    handleBar.Text             = ""
+    handleBar.ZIndex           = 20
+    handleBar.Parent           = sheet
+
+    local pill = Instance.new("Frame")
+    pill.Size             = UDim2.new(0, 40, 0, 4)
+    pill.Position         = UDim2.new(0.5, -20, 0, 10)
+    pill.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+    pill.BorderSizePixel  = 0
+    pill.ZIndex           = 21
+    pill.Parent           = sheet
+    Instance.new("UICorner", pill).CornerRadius = UDim.new(0, 2)
+
+    -- Status chip in handle bar
+    local statusBadge = Instance.new("TextLabel")
+    statusBadge.Size               = UDim2.new(0, 180, 0, 24)
+    statusBadge.Position           = UDim2.new(0.5, -90, 0, 16)
+    statusBadge.BackgroundColor3   = Color3.fromRGB(18, 18, 24)
+    statusBadge.BackgroundTransparency = 0.2
+    statusBadge.Font               = Enum.Font.GothamBold
+    statusBadge.Text               = "◈  No target"
+    statusBadge.TextColor3         = Color3.fromRGB(140, 50, 50)
+    statusBadge.TextSize           = 12
+    statusBadge.ZIndex             = 22
+    statusBadge.Parent             = sheet
+    Instance.new("UICorner", statusBadge).CornerRadius = UDim.new(0, 8)
+
+    -- ── Sheet animation ───────────────────────────────────
+    local function animateSheet(toOpen)
+        sheetOpen     = toOpen
+        local targetH = toOpen and SHEET_FULL or SHEET_PEEK
+        local fromH   = toOpen and SHEET_PEEK or SHEET_FULL
+        local dur     = 0.28
+        local startT  = tick()
+        sheet.ClipsDescendants = true
+        while true do
+            local alpha = math.clamp((tick() - startT) / dur, 0, 1)
+            local ease  = 1 - (1 - alpha)^3
+            local h     = math.floor(fromH + (targetH - fromH) * ease)
+            sheet.Size     = UDim2.new(1, 0, 0, h)
+            sheet.Position = UDim2.new(0, 0, 1, -h)
+            if alpha >= 1 then break end
+            RunService.Heartbeat:Wait()
+        end
+        sheet.Size     = UDim2.new(1, 0, 0, targetH)
+        sheet.Position = UDim2.new(0, 0, 1, -targetH)
+    end
+
+    handleBar.MouseButton1Click:Connect(function()
+        animateSheet(not sheetOpen)
+    end)
+
+    -- ── Tab bar (bottom of sheet) ─────────────────────────
+    local TAB_BAR_H = 54
+    local tabBar = Instance.new("Frame")
+    tabBar.Name             = "TabBar"
+    tabBar.Size             = UDim2.new(1, 0, 0, TAB_BAR_H)
+    tabBar.Position         = UDim2.new(0, 0, 1, -TAB_BAR_H)
+    tabBar.BackgroundColor3 = BG_TAB
+    tabBar.BorderSizePixel  = 0
+    tabBar.ZIndex           = 18
+    tabBar.Parent           = sheet
+
+    local tabTopLine = Instance.new("Frame")
+    tabTopLine.Size             = UDim2.new(1, 0, 0, 1)
+    tabTopLine.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    tabTopLine.BorderSizePixel  = 0
+    tabTopLine.ZIndex           = 19
+    tabTopLine.Parent           = tabBar
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.FillDirection       = Enum.FillDirection.Horizontal
+    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    tabLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+    tabLayout.Padding             = UDim.new(0, 0)
+    tabLayout.Parent              = tabBar
+
+    -- ── Content area (between handle and tab bar) ─────────
+    local CONTENT_TOP = 44
+    local CONTENT_BOT = TAB_BAR_H
+
+    local contentHost = Instance.new("Frame")
+    contentHost.Name             = "ContentHost"
+    contentHost.Size             = UDim2.new(1, 0, 1, -(CONTENT_TOP + CONTENT_BOT))
+    contentHost.Position         = UDim2.new(0, 0, 0, CONTENT_TOP)
+    contentHost.BackgroundTransparency = 1
+    contentHost.BorderSizePixel  = 0
+    contentHost.ClipsDescendants = true
+    contentHost.ZIndex           = 16
+    contentHost.Parent           = sheet
+
+    -- ── Helpers ───────────────────────────────────────────
+    local function makeScroll(parent)
+        local sf = Instance.new("ScrollingFrame")
+        sf.Size                   = UDim2.new(1, 0, 1, 0)
+        sf.BackgroundTransparency = 1
+        sf.BorderSizePixel        = 0
+        sf.ScrollBarThickness     = 3
+        sf.ScrollBarImageColor3   = ACCENT
+        sf.CanvasSize             = UDim2.new(0, 0, 0, 0)
+        sf.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+        sf.Parent                 = parent
+
+        local layout = Instance.new("UIListLayout")
+        layout.Padding             = UDim.new(0, 8)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.SortOrder           = Enum.SortOrder.LayoutOrder
+        layout.Parent              = sf
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop    = UDim.new(0, 10)
+        pad.PaddingBottom = UDim.new(0, 18)
+        pad.PaddingLeft   = UDim.new(0, 12)
+        pad.PaddingRight  = UDim.new(0, 12)
+        pad.Parent        = sf
+
+        return sf
+    end
+
+    local function makeSectionLabel(parent, text, order)
+        local lbl = Instance.new("TextLabel")
+        lbl.Name               = "Sec_" .. text
+        lbl.Size               = UDim2.new(1, 0, 0, 26)
+        lbl.BackgroundTransparency = 1
+        lbl.Font               = Enum.Font.GothamBold
+        lbl.Text               = "  " .. text
+        lbl.TextColor3         = ACCENT2
+        lbl.TextSize           = 11
+        lbl.TextXAlignment     = Enum.TextXAlignment.Left
+        lbl.LayoutOrder        = order or 0
+        lbl.Parent             = parent
+        return lbl
+    end
+
+    -- Toggle row: 52px tall for comfortable thumb tap
+    local function makeToggleRow(parent, labelText, isOnDefault, order)
+        local row = Instance.new("Frame")
+        row.Name             = "Toggle_" .. labelText
+        row.Size             = UDim2.new(1, 0, 0, 52)
+        row.BackgroundColor3 = BG_CARD
+        row.BorderSizePixel  = 0
+        row.LayoutOrder      = order or 0
+        row.Parent           = parent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
+        local s = Instance.new("UIStroke")
+        s.Color     = BORDER
+        s.Thickness = 1
+        s.Parent    = row
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size               = UDim2.new(1, -72, 1, 0)
+        lbl.Position           = UDim2.new(0, 14, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Font               = Enum.Font.GothamBold
+        lbl.Text               = labelText
+        lbl.TextColor3         = TEXT_PRI
+        lbl.TextSize           = 13
+        lbl.TextXAlignment     = Enum.TextXAlignment.Left
+        lbl.TextWrapped        = true
+        lbl.Parent             = row
+
+        -- Pill toggle (44x24)
+        local pillBg = Instance.new("Frame")
+        pillBg.Size             = UDim2.new(0, 44, 0, 24)
+        pillBg.Position         = UDim2.new(1, -54, 0.5, -12)
+        pillBg.BackgroundColor3 = isOnDefault and ON_GREEN or OFF_GRAY
+        pillBg.BorderSizePixel  = 0
+        pillBg.Parent           = row
+        Instance.new("UICorner", pillBg).CornerRadius = UDim.new(0, 12)
+
+        local knob = Instance.new("Frame")
+        knob.Size             = UDim2.new(0, 18, 0, 18)
+        knob.Position         = isOnDefault and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        knob.BorderSizePixel  = 0
+        knob.Parent           = pillBg
+        Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 9)
+
+        local isOn = isOnDefault
+
+        local clickBtn = Instance.new("TextButton")
+        clickBtn.Size               = UDim2.new(1, 0, 1, 0)
+        clickBtn.BackgroundTransparency = 1
+        clickBtn.Text               = ""
+        clickBtn.BorderSizePixel    = 0
+        clickBtn.ZIndex             = 3
+        clickBtn.Parent             = row
+
+        local TW = TweenInfo.new(0.14, Enum.EasingStyle.Quad)
+        local function setOn(val)
+            isOn = val
+            TweenService:Create(pillBg, TW, {BackgroundColor3 = val and ON_GREEN or OFF_GRAY}):Play()
+            TweenService:Create(knob,   TW, {Position = val
+                and UDim2.new(1, -21, 0.5, -9)
+                or  UDim2.new(0,  3, 0.5, -9)}):Play()
+        end
+        local function toggle() setOn(not isOn); return isOn end
+        local function getState() return isOn end
+
+        return row, clickBtn, toggle, getState, lbl, setOn
+    end
+
+    local function makeValueRow(parent, labelText, defaultVal, minVal, maxVal, onChanged, order)
+        local row = Instance.new("Frame")
+        row.Name             = "Value_" .. labelText
+        row.Size             = UDim2.new(1, 0, 0, 48)
+        row.BackgroundColor3 = BG_CARD
+        row.BorderSizePixel  = 0
+        row.LayoutOrder      = order or 0
+        row.Parent           = parent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
+        local rs = Instance.new("UIStroke"); rs.Color = BORDER; rs.Thickness = 1; rs.Parent = row
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size               = UDim2.new(0.6, 0, 1, 0)
+        nameLbl.Position           = UDim2.new(0, 14, 0, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Font               = Enum.Font.Gotham
+        nameLbl.Text               = labelText
+        nameLbl.TextColor3         = TEXT_SEC
+        nameLbl.TextSize           = 12
+        nameLbl.TextXAlignment     = Enum.TextXAlignment.Left
+        nameLbl.Parent             = row
+
+        local box = Instance.new("TextBox")
+        box.Size             = UDim2.new(0, 80, 0, 32)
+        box.Position         = UDim2.new(1, -90, 0.5, -16)
+        box.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+        box.Font             = Enum.Font.GothamBold
+        box.Text             = tostring(defaultVal)
+        box.TextColor3       = ACCENT2
+        box.TextSize         = 13
+        box.ClearTextOnFocus = false
+        box.BorderSizePixel  = 0
+        box.Parent           = row
+        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
+        local bs = Instance.new("UIStroke"); bs.Color = Color3.fromRGB(100,20,20); bs.Thickness = 1; bs.Parent = box
+
+        box.FocusLost:Connect(function()
+            local num = tonumber(box.Text)
+            if num and num >= minVal then
+                num = math.clamp(num, minVal, maxVal)
+                onChanged(num)
+                box.Text = tostring(num)
+            else
+                box.Text = tostring(defaultVal)
+            end
+        end)
+
+        return row, box
+    end
+
+    local function makeActionButton(parent, text, bgColor, textColor, strokeColor, order)
+        local btn = Instance.new("TextButton")
+        btn.Name             = "Btn_" .. text
+        btn.Size             = UDim2.new(1, 0, 0, 52)
+        btn.BackgroundColor3 = bgColor
+        btn.Font             = Enum.Font.GothamBold
+        btn.Text             = text
+        btn.TextColor3       = textColor
+        btn.TextSize         = 14
+        btn.AutoButtonColor  = false
+        btn.BorderSizePixel  = 0
+        btn.LayoutOrder      = order or 0
+        btn.Parent           = parent
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+        local st = Instance.new("UIStroke")
+        st.Color     = strokeColor
+        st.Thickness = 1.5
+        st.Parent    = btn
+        return btn
+    end
+
+    local function makeStatusChip(parent, text, color, order)
+        local chip = Instance.new("TextLabel")
+        chip.Size               = UDim2.new(1, 0, 0, 36)
+        chip.BackgroundColor3   = Color3.fromRGB(16, 16, 22)
+        chip.Font               = Enum.Font.GothamBold
+        chip.Text               = text
+        chip.TextColor3         = color
+        chip.TextSize           = 12
+        chip.TextXAlignment     = Enum.TextXAlignment.Center
+        chip.BorderSizePixel    = 0
+        chip.LayoutOrder        = order or 0
+        chip.Parent             = parent
+        Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 8)
+        local s = Instance.new("UIStroke"); s.Color = BORDER; s.Thickness = 1; s.Parent = chip
+        return chip
+    end
+
+    -- ── Tab system ────────────────────────────────────────
+    local tabs      = {}
+    local tabFrames = {}
+    local activeTab = nil
+
+    local TAB_DEFS = {
+        { name = "COMBAT", icon = "⚔",  order = 1 },
+        { name = "YUJI",   icon = "⚡",  order = 2 },
+        { name = "FLIGHT", icon = "✈",  order = 3 },
+        { name = "CDs",    icon = "⏱",  order = 4 },
+    }
+
+    local function selectTab(name)
+        if activeTab then
+            tabs[activeTab].btn.TextColor3       = TEXT_SEC
+            tabs[activeTab].btn.BackgroundColor3 = Color3.fromRGB(0,0,0,0)
+            tabs[activeTab].btn.BackgroundTransparency = 1
+            tabs[activeTab].indicator.BackgroundTransparency = 1
+            tabFrames[activeTab].frame.Visible   = false
+        end
+        activeTab = name
+        tabs[name].btn.TextColor3       = ACCENT2
+        tabs[name].btn.BackgroundColor3 = Color3.fromRGB(30,10,10)
+        tabs[name].btn.BackgroundTransparency = 0
+        tabs[name].indicator.BackgroundTransparency = 0
+        tabFrames[name].frame.Visible   = true
+
+        -- auto-open sheet when a tab is tapped
+        if not sheetOpen then animateSheet(true) end
+    end
+
+    local tabW = math.floor(100 / #TAB_DEFS)
+    for _, td in ipairs(TAB_DEFS) do
+        local btn = Instance.new("TextButton")
+        btn.Name             = "Tab_" .. td.name
+        btn.Size             = UDim2.new(0, tabW, 1, 0)
+        -- size will be overridden by layout; use UDim2 with equal share
+        btn.Size             = UDim2.new(1 / #TAB_DEFS, 0, 1, 0)
+        btn.BackgroundTransparency = 1
+        btn.Font             = Enum.Font.GothamBold
+        btn.Text             = td.icon .. "\n" .. td.name
+        btn.TextColor3       = TEXT_SEC
+        btn.TextSize         = 11
+        btn.AutoButtonColor  = false
+        btn.BorderSizePixel  = 0
+        btn.ZIndex           = 20
+        btn.Parent           = tabBar
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+        -- active indicator line at top of tab button
+        local indicator = Instance.new("Frame")
+        indicator.Size             = UDim2.new(0.6, 0, 0, 2)
+        indicator.Position         = UDim2.new(0.2, 0, 0, 0)
+        indicator.BackgroundColor3 = ACCENT2
+        indicator.BorderSizePixel  = 0
+        indicator.BackgroundTransparency = 1
+        indicator.ZIndex           = 21
+        indicator.Parent           = btn
+        Instance.new("UICorner", indicator).CornerRadius = UDim.new(0, 1)
+
+        local frame = Instance.new("Frame")
+        frame.Name             = "Content_" .. td.name
+        frame.Size             = UDim2.new(1, 0, 1, 0)
+        frame.BackgroundTransparency = 1
+        frame.BorderSizePixel  = 0
+        frame.Visible          = false
+        frame.Parent           = contentHost
+
+        local scroll = makeScroll(frame)
+
+        tabs[td.name]      = { btn = btn, indicator = indicator }
+        tabFrames[td.name] = { frame = frame, scroll = scroll }
+
+        btn.MouseButton1Click:Connect(function() selectTab(td.name) end)
+    end
+
+    -- select first tab by default
+    selectTab("COMBAT")
+    tabFrames["COMBAT"].frame.Visible = true
+
+    -- ═══════════════════════════════════════════════════
+    -- COMBAT TAB
+    -- ═══════════════════════════════════════════════════
+    do
+        local s = tabFrames["COMBAT"].scroll
+
+        -- Invisibility
+        makeSectionLabel(s, "INVISIBILITY", 1)
+        local invisRow, invisClick, invisToggle, invisGet, _, invisSetOn =
+            makeToggleRow(s, "INVISIBILITY  —  makes your char semi-transparent", false, 2)
+        invisClick.MouseButton1Click:Connect(function()
+            invisToggle()
+            INVIS.Enabled = invisGet()
+            if INVIS.Enabled then startInvis() else stopInvis() end
+        end)
+        function GUI_API.SetInvisState(isOn) invisSetOn(isOn) end
+
+        -- Lock-On
+        makeSectionLabel(s, "LOCK-ON", 3)
+
+        local lockBtn = makeActionButton(s,
+            "Toggle Lock-On",
+            Color3.fromRGB(22, 60, 120),
+            Color3.fromRGB(180, 210, 255),
+            Color3.fromRGB(35, 90, 180), 4)
+        lockBtn.MouseButton1Click:Connect(function()
+            ToggleLockOn()
+        end)
+
+        local slRow, slClick, slToggle, slGet, _, slSetOn =
+            makeToggleRow(s, "SOFT LOCK  —  select target without locking camera", false, 5)
+        slClick.MouseButton1Click:Connect(function()
+            slToggle()
+            State.softLockEnabled = slGet()
+            if not State.softLockEnabled and State.AntiTeamingEnabled then
+                clearAllMultiTargets()
+                if GUI_API.SetStatus then GUI_API.SetStatus(false, nil) end
+            end
+            if State.Locked then
+                if State.softLockEnabled then
+                    Camera.CameraType = Enum.CameraType.Custom
+                    local c = LocalPlayer.Character
+                    if c then local h = c:FindFirstChildOfClass("Humanoid") if h then h.AutoRotate = true end end
+                else
+                    Camera.CameraType = Enum.CameraType.Scriptable
+                    local c = LocalPlayer.Character
+                    if c then local h = c:FindFirstChildOfClass("Humanoid") if h then h.AutoRotate = false end end
+                end
+            end
+        end)
+
+        -- Lock circle floating button
+        local lockCircleEnabled = true
+        local lockCircleGui     = nil
+
+        local function buildLockCircle()
+            if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end
+            local sg = Instance.new("ScreenGui")
+            sg.Name           = "LockCircleGui"
+            sg.ResetOnSpawn   = false
+            sg.IgnoreGuiInset = true
+            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            sg.Parent         = pg
+
+            local circle = Instance.new("TextButton")
+            circle.Size             = UDim2.new(0, 80, 0, 80)
+            circle.Position         = UDim2.new(0, 18, 0.5, -110)
+            circle.BackgroundColor3 = Color3.fromRGB(22, 60, 120)
+            circle.Font             = Enum.Font.GothamBold
+            circle.Text             = "LOCK"
+            circle.TextColor3       = Color3.fromRGB(180, 215, 255)
+            circle.TextSize         = 14
+            circle.AutoButtonColor  = false
+            circle.BorderSizePixel  = 0
+            circle.Active           = true
+            circle.Draggable        = true
+            circle.ZIndex           = 30
+            circle.Parent           = sg
+            Instance.new("UICorner", circle).CornerRadius = UDim.new(0.5, 0)
+            local cSt = Instance.new("UIStroke"); cSt.Color = Color3.fromRGB(40,100,180); cSt.Thickness = 2.5; cSt.Parent = circle
+
+            local function refreshCircle()
+                if State.Locked then
+                    circle.BackgroundColor3 = Color3.fromRGB(110,18,18)
+                    circle.TextColor3       = Color3.fromRGB(255,170,170)
+                    cSt.Color               = Color3.fromRGB(160,28,28)
+                    circle.Text             = "UNLOCK"
+                    circle.TextSize         = 11
+                else
+                    circle.BackgroundColor3 = Color3.fromRGB(22,60,120)
+                    circle.TextColor3       = Color3.fromRGB(180,215,255)
+                    cSt.Color               = Color3.fromRGB(40,100,180)
+                    circle.Text             = "LOCK"
+                    circle.TextSize         = 14
+                end
+            end
+
+            circle.MouseButton1Click:Connect(function()
+                ToggleLockOn(); refreshCircle()
+            end)
+            RunService.Heartbeat:Connect(function()
+                if not lockCircleGui then return end
+                refreshCircle()
+            end)
+            lockCircleGui = sg
+        end
+
+        local lcRow, lcClick, lcToggle, lcGet =
+            makeToggleRow(s, "LOCK CIRCLE BUTTON  —  floating on-screen button", true, 6)
+        if lockCircleEnabled then buildLockCircle() end
+        lcClick.MouseButton1Click:Connect(function()
+            lcToggle()
+            lockCircleEnabled = lcGet()
+            if lockCircleEnabled then buildLockCircle()
+            else if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end end
+        end)
+
+        -- Auto Block
+        makeSectionLabel(s, "AUTO BLOCK", 7)
+        local abRow, abClick, abToggle, abGet = makeToggleRow(s, "AUTO BLOCK", true, 8)
+        abClick.MouseButton1Click:Connect(function() abToggle(); State.autoBlockEnabled = abGet() end)
+
+        local beRow, beClick, beToggle, beGet = makeToggleRow(s, "BLOCK EVERYTHING  —  blocks most moves", true, 9)
+        beClick.MouseButton1Click:Connect(function() beToggle(); State.blockEverythingEnabled = beGet() end)
+
+        local apRow, apClick, apToggle, apGet = makeToggleRow(s, "AUTO PUNISH", true, 10)
+        apClick.MouseButton1Click:Connect(function() apToggle(); State.autoPunishEnabled = apGet() end)
+
+        -- Sidedash
+        makeSectionLabel(s, "SIDEDASH", 11)
+
+        local sdRow, sdClick, sdToggle, sdGet = makeToggleRow(s, "AUTO SIDEDASH", true, 12)
+        sdClick.MouseButton1Click:Connect(function()
+            sdToggle(); autoSidedashEnabled = sdGet()
+        end)
+
+        -- Dash circle floating button
+        local dashCircleEnabled = true
+        local dashCircleGui     = nil
+
+        local function buildDashCircle()
+            if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end
+            local sg = Instance.new("ScreenGui")
+            sg.Name           = "DashCircleGui"
+            sg.ResetOnSpawn   = false
+            sg.IgnoreGuiInset = true
+            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            sg.Parent         = pg
+
+            local circle = Instance.new("TextButton")
+            circle.Size             = UDim2.new(0, 80, 0, 80)
+            circle.Position         = UDim2.new(0, 18, 0.5, -20)
+            circle.BackgroundColor3 = Color3.fromRGB(25, 40, 30)
+            circle.Font             = Enum.Font.GothamBold
+            circle.Text             = "DASH"
+            circle.TextColor3       = Color3.fromRGB(100, 200, 130)
+            circle.TextSize         = 14
+            circle.AutoButtonColor  = false
+            circle.BorderSizePixel  = 0
+            circle.Active           = true
+            circle.Draggable        = true
+            circle.ZIndex           = 30
+            circle.Parent           = sg
+            Instance.new("UICorner", circle).CornerRadius = UDim.new(0.5, 0)
+            local dSt = Instance.new("UIStroke"); dSt.Color = Color3.fromRGB(55,200,100); dSt.Thickness = 2.5; dSt.Parent = circle
+
+            circle.MouseButton1Click:Connect(function()
+                if not State.Locked or not State.Target then return end
+                if not comboInProgress and isInRange(State.Target, COMBO.Range) then
+                    task.defer(function()
+                        task.wait(0.05)
+                        if not comboInProgress and State.Locked and State.Target
+                           and isInRange(State.Target, COMBO.Range) then
+                            comboManualArmed = true
+                        end
+                    end)
+                end
+            end)
+
+            RunService.Heartbeat:Connect(function()
+                if not dashCircleGui then return end
+                if State.Locked and State.Target and isInRange(State.Target, COMBO.Range) then
+                    circle.BackgroundColor3 = Color3.fromRGB(18, 55, 28)
+                    dSt.Color               = Color3.fromRGB(55, 200, 100)
+                    circle.TextColor3       = Color3.fromRGB(55, 210, 110)
+                else
+                    circle.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+                    dSt.Color               = Color3.fromRGB(70, 70, 85)
+                    circle.TextColor3       = Color3.fromRGB(100, 100, 120)
+                end
+            end)
+            dashCircleGui = sg
+        end
+
+        local dcRow, dcClick, dcToggle, dcGet =
+            makeToggleRow(s, "DASH CIRCLE BUTTON  —  floating on-screen button", true, 13)
+        if dashCircleEnabled then buildDashCircle() end
+        dcClick.MouseButton1Click:Connect(function()
+            dcToggle()
+            dashCircleEnabled = dcGet()
+            if dashCircleEnabled then buildDashCircle()
+            else if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end end
+        end)
+
+        local driRow, driClick, driToggle, driGet =
+            makeToggleRow(s, "DASH RANGE INDICATOR  —  top banner shows DASH / DON'T", true, 14)
+        driClick.MouseButton1Click:Connect(function()
+            driToggle()
+            dashRangeIndicatorEnabled = driGet()
+        end)
+
+        local sirRow, sirClick, sirToggle, sirGet =
+            makeToggleRow(s, "SIDEDASH IN RANGE", true, 15)
+        sirClick.MouseButton1Click:Connect(function() sirToggle(); autoSidedashWhenInRangeEnabled = sirGet() end)
+
+        -- Click control
+        makeSectionLabel(s, "CLICK CONTROL", 16)
+        local bm1Row, bm1Click, bm1Toggle, bm1Get =
+            makeToggleRow(s, "BLOCK M1 WHEN OPPONENT IS BLOCKING", true, 17)
+        bm1Click.MouseButton1Click:Connect(function()
+            bm1Toggle(); blockM1Enabled = bm1Get()
+        end)
+
+        -- Armed chip (combo)
+        local combo3ArmedLabel = makeStatusChip(s, "", Color3.fromRGB(255,200,0), 18)
+        combo3ArmedLabel.BackgroundTransparency = 1
+
+        local armedBlinkConn = nil
+        function GUI_API.SetCombo3Armed(isArmed)
+            if armedBlinkConn then armedBlinkConn:Disconnect(); armedBlinkConn = nil end
+            if isArmed then
+                armedBlinkConn = RunService.Heartbeat:Connect(function()
+                    if not comboArmedPersistent then
+                        if armedBlinkConn then armedBlinkConn:Disconnect(); armedBlinkConn = nil end
+                        combo3ArmedLabel.Text = ""
+                        return
+                    end
+                    local remaining = math.max(0, COMBO_PERSISTENT_TIMEOUT - (tick() - comboArmedPersistentTime))
+                    combo3ArmedLabel.Text = "⚡ ARMED  " .. string.format("%.1f", remaining) .. "s"
+                    combo3ArmedLabel.TextColor3 = remaining <= 3 and Color3.fromRGB(255,80,80) or Color3.fromRGB(255,200,0)
+                end)
+            else
+                combo3ArmedLabel.Text = ""
+            end
+        end
+
+        -- Status update
+        function GUI_API.SetStatus(isLocked, targetName)
+            if isLocked then
+                statusBadge.Text       = "◈  " .. (targetName or "?")
+                statusBadge.TextColor3 = Color3.fromRGB(55, 200, 100)
+                lockBtn.Text           = "Unlock Target"
+                lockBtn.BackgroundColor3 = Color3.fromRGB(110, 18, 18)
+            else
+                statusBadge.Text       = "◈  No target"
+                statusBadge.TextColor3 = Color3.fromRGB(140, 50, 50)
+                lockBtn.Text           = "Toggle Lock-On"
+                lockBtn.BackgroundColor3 = Color3.fromRGB(22, 60, 120)
+            end
+        end
+
+        function GUI_API.SetKeyLabel(k) end
+        function GUI_API.SetComboKeyLabel(k) end
+        function GUI_API.SetCombo3KeyLabel(k) end
+        function GUI_API.SetAntiTeamClearKeyLabel(k) end
+    end
+
+    -- ═══════════════════════════════════════════════════
+    -- YUJI TAB
+    -- ═══════════════════════════════════════════════════
+    do
+        local s = tabFrames["YUJI"].scroll
+
+        makeSectionLabel(s, "BLACK FLASH CHAIN", 1)
+        local bfcRow, bfcClick, bfcToggle, bfcGet =
+            makeToggleRow(s, "AUTO BLACKFLASH CHAIN", false, 2)
+        bfcClick.MouseButton1Click:Connect(function() bfcToggle(); bfChainEnabled = bfcGet() end)
+
+        makeSectionLabel(s, "MANJI KICK", 3)
+        local mkRow, mkClick, mkToggle, mkGet =
+            makeToggleRow(s, "MANJI KICK  —  counters unblockable moves", false, 4)
+        mkClick.MouseButton1Click:Connect(function() mkToggle(); enabled = mkGet() end)
+
+        makeSectionLabel(s, "AUTO BLACK FLASH", 5)
+        local afRow, afClick, afToggle, afGet =
+            makeToggleRow(s, "AUTO BLACK FLASH", false, 6)
+        afClick.MouseButton1Click:Connect(function() afToggle(); autoBlackFlashEnabled = afGet() end)
+
+        function GUI_API.SetCombo2KeyLabel(k) end
+    end
+
+    -- ═══════════════════════════════════════════════════
+    -- FLIGHT TAB
+    -- ═══════════════════════════════════════════════════
+    do
+        local s = tabFrames["FLIGHT"].scroll
+
+        makeSectionLabel(s, "VILTRUMITE FLIGHT", 1)
+        local flRow, flClick, flToggle, flGet =
+            makeToggleRow(s, "FLIGHT MODE", false, 2)
+        flClick.MouseButton1Click:Connect(function()
+            flToggle()
+            Settings.FlightEnabled = flGet()
+            if Settings.FlightEnabled then
+                bodyVelocity.Parent = rootPart
+                bodyGyro.Parent     = rootPart
+            else
+                isFlying = false
+                stopSuppressingAnimations()
+                if humanoid then
+                    humanoid.PlatformStand = false
+                    humanoid.CameraOffset  = Vector3.new(0,0,0)
+                    if savedAutoRotate ~= nil then
+                        humanoid.AutoRotate = savedAutoRotate
+                        savedAutoRotate = nil
+                    else
+                        humanoid.AutoRotate = true
+                    end
+                end
+                snapPoseToNeutral()
+                teardownFlightObjects()
+                currentVelocity = Vector3.new()
+            end
+        end)
+
+        makeValueRow(s, "Flight Speed", Settings.BaseSpeed, 5, 1000, function(num)
+            Settings.BaseSpeed = num
+        end, 3)
+
+        local flightStatusLbl = makeStatusChip(s, "✈  Flight: Grounded", Color3.fromRGB(100,100,120), 4)
+
+        makeSectionLabel(s, "GROUND SPRINT", 5)
+        local spRow, spClick, spToggle, spGet =
+            makeToggleRow(s, "SPRINT MODE", false, 6)
+        spClick.MouseButton1Click:Connect(function()
+            spToggle()
+            SprintSettings.Enabled = spGet()
+            if not SprintSettings.Enabled then isGroundSprinting = false end
+        end)
+
+        makeValueRow(s, "Ground Speed", SprintSettings.GroundSpeed, 16, 500, function(num)
+            SprintSettings.GroundSpeed = num
+        end, 7)
+
+        local sprintStatusLbl = makeStatusChip(s, "🏃  Sprint: Normal Speed", Color3.fromRGB(100,100,120), 8)
+
+        function GUI_API.SetFlightKeyLabel(k) end
+        function GUI_API.SetSprintKeyLabel(k) end
+
+        RunService.Heartbeat:Connect(function()
+            flightStatusLbl.Text       = isFlying        and "✈  Flight: Active"       or "✈  Flight: Grounded"
+            flightStatusLbl.TextColor3 = isFlying        and ON_GREEN                   or Color3.fromRGB(100,100,120)
+            sprintStatusLbl.Text       = isGroundSprinting and "🏃  Sprint: Active"    or "🏃  Sprint: Normal Speed"
+            sprintStatusLbl.TextColor3 = isGroundSprinting and ON_GREEN                or Color3.fromRGB(100,100,120)
+        end)
+    end
+
+    -- ═══════════════════════════════════════════════════
+    -- CDs TAB
+    -- ═══════════════════════════════════════════════════
+    do
+        local s = tabFrames["CDs"].scroll
+
+        makeSectionLabel(s, "COOLDOWN TRACKER", 1)
+        local cdRow, cdClick, cdToggle, cdGet =
+            makeToggleRow(s, "SHOW ALL COOLDOWNS", true, 2)
+        cdClick.MouseButton1Click:Connect(function()
+            cdToggle()
+            CDTRACK.ENABLED = cdGet()
+            for player, data in pairs(CDPlayerData) do
+                if data.gui then data.gui.Enabled = CDTRACK.ENABLED end
+                if CDTRACK.ENABLED and not data.gui and player.Character then
+                    createCDGui(player)
+                end
+            end
+        end)
+    end
+
+    -- ── Patch blockM1 override ────────────────────────────
+    local _origUpdateLeftClickBlock = updateLeftClickBlock
+    updateLeftClickBlock = function()
+        if not blockM1Enabled then
+            if leftClickBlocked then
+                CAS:UnbindAction("blockLeftClick")
+                leftClickBlocked = false
+            end
+            return
+        end
+        _origUpdateLeftClickBlock()
+    end
+end
+
+-- =========================================================
+-- BOOT
+-- =========================================================
+buildDashWidget()
+playOpeningAnimation(function()
+    buildGui()
+end)
+
+print("[SCRIPTIFY HUB] Mobile GUI loaded ✓")
