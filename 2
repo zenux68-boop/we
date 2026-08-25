@@ -3841,7 +3841,10 @@ RunService.RenderStepped:Connect(function()
 end)
 
 
-
+local floatingDashWidget
+local dashWidgetLabel   = nil
+local dashWidgetStroke  = nil
+local dashRangeIndicatorEnabled = true   -- on by default
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
@@ -3866,87 +3869,64 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     return oldNamecall(self, ...)
 end))
 
---[[
-    SCRIPTIFY HUB — MOBILE GUI REPLACEMENT
-    Drop this in to replace everything from "local function buildDashWidget()"
-    through to the final print() at the bottom of your script.
-    Keep all code above that line exactly as-is.
-    
-    Changes vs. the original:
-    • Full-width bottom-sheet panel (no fixed 580px float)
-    • Bottom tab bar with large thumb-friendly icons
-    • 48px+ touch targets on every toggle / button
-    • Sheet slides up/down instead of minimize button
-    • Floating LOCK and DASH circles are larger (80px)
-    • Dash-range indicator is a compact top banner
-    • Fonts and labels sized for phone screens
-]]
-
--- =========================================================
--- DASH RANGE INDICATOR (top banner, replaces floating widget)
--- =========================================================
-local dashRangeIndicatorEnabled = true
-local floatingDashWidget        = nil  -- kept for compatibility
-
 local function buildDashWidget()
     local pg = LocalPlayer:WaitForChild("PlayerGui")
     local sg = Instance.new("ScreenGui")
     sg.Name           = "DashIndicatorGui"
     sg.ResetOnSpawn   = false
     sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Enabled        = true
     sg.Parent         = pg
     floatingDashWidget = sg
 
-    -- thin banner pinned to top-center
-    local banner = Instance.new("Frame")
-    banner.Size             = UDim2.new(0, 200, 0, 38)
-    banner.Position         = UDim2.new(0.5, -100, 0, 10)
-    banner.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
-    banner.BorderSizePixel  = 0
-    banner.ZIndex           = 12
-    banner.Parent           = sg
-    Instance.new("UICorner", banner).CornerRadius = UDim.new(0, 10)
+    local frame = Instance.new("Frame")
+    frame.Size                   = UDim2.new(0, 160, 0, 42)
+    frame.Position               = UDim2.new(0.5, -80, 0, 60)
+    frame.BackgroundColor3       = Color3.fromRGB(10, 10, 13)
+    frame.BackgroundTransparency = 0
+    frame.BorderSizePixel        = 0
+    frame.Active                 = true
+    frame.Draggable              = true
+    frame.Parent                 = sg
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 
-    local bannerStroke = Instance.new("UIStroke")
-    bannerStroke.Thickness = 1.5
-    bannerStroke.Color     = Color3.fromRGB(60, 60, 70)
-    bannerStroke.Parent    = banner
+    local stroke = Instance.new("UIStroke")
+    stroke.Color     = Color3.fromRGB(60, 60, 70)
+    stroke.Thickness = 1.5
+    stroke.Parent    = frame
+    dashWidgetStroke = stroke
 
-    local bannerLbl = Instance.new("TextLabel")
-    bannerLbl.Size               = UDim2.new(1, 0, 1, 0)
-    bannerLbl.BackgroundTransparency = 1
-    bannerLbl.Font               = Enum.Font.GothamBold
-    bannerLbl.Text               = "DON'T DASH"
-    bannerLbl.TextColor3         = Color3.fromRGB(200, 60, 60)
-    bannerLbl.TextSize           = 14
-    bannerLbl.Parent             = banner
+    local lbl = Instance.new("TextLabel")
+    lbl.Size               = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.Text               = "DON'T DASH"
+    lbl.TextColor3         = Color3.fromRGB(180, 40, 40)
+    lbl.TextSize           = 16
+    lbl.Parent             = frame
+    dashWidgetLabel = lbl
 
+    -- FIXED: check locked + in range (not autoSidedashEnabled which was always false at this point)
     RunService.RenderStepped:Connect(function()
-        if not dashRangeIndicatorEnabled then
-            sg.Enabled = false
-            return
-        end
-        sg.Enabled = true
+        if not dashRangeIndicatorEnabled then return end
         if State.Locked and State.Target and isInRange(State.Target, COMBO.Range) then
-            bannerLbl.Text       = "✦  DASH"
-            bannerLbl.TextColor3 = Color3.fromRGB(60, 210, 110)
-            bannerStroke.Color   = Color3.fromRGB(60, 210, 110)
+            lbl.Text       = "✦  DASH"
+            lbl.TextColor3 = Color3.fromRGB(60, 210, 110)
+            stroke.Color   = Color3.fromRGB(60, 210, 110)
         else
-            bannerLbl.Text       = "DON'T DASH"
-            bannerLbl.TextColor3 = Color3.fromRGB(200, 60, 60)
-            bannerStroke.Color   = Color3.fromRGB(60, 60, 70)
+            lbl.Text       = "DON'T DASH"
+            lbl.TextColor3 = Color3.fromRGB(180, 40, 40)
+            stroke.Color   = Color3.fromRGB(60, 60, 70)
         end
     end)
 end
 
--- =========================================================
--- OPENING ANIMATION
--- =========================================================
+
 local function playOpeningAnimation(onComplete)
     local pg = LocalPlayer:WaitForChild("PlayerGui")
 
     local introGui = Instance.new("ScreenGui")
-    introGui.Name           = "ScriptifyHubIntro"
+    introGui.Name = "ScriptifyHubIntro"
     introGui.ResetOnSpawn   = false
     introGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     introGui.Parent         = pg
@@ -3961,13 +3941,14 @@ local function playOpeningAnimation(onComplete)
     scanline.Parent                 = introGui
 
     local mainLbl = Instance.new("TextLabel")
-    mainLbl.Size               = UDim2.new(1, 0, 0, 70)
-    mainLbl.Position           = UDim2.new(0, 0, 0.42, 0)
+    mainLbl.Size               = UDim2.new(1, 0, 0, 60)
+    mainLbl.Position           = UDim2.new(0, 0, 0.46, 0)
     mainLbl.BackgroundTransparency = 1
     mainLbl.Font               = Enum.Font.GothamBold
     mainLbl.Text               = ""
     mainLbl.TextColor3         = Color3.fromRGB(220, 220, 220)
-    mainLbl.TextSize           = 38
+    mainLbl.TextSize           = 42
+    mainLbl.TextXAlignment     = Enum.TextXAlignment.Center
     mainLbl.ZIndex             = 103
     mainLbl.Parent             = introGui
 
@@ -3983,7 +3964,7 @@ local function playOpeningAnimation(onComplete)
     local glitchChars = {"SCR1PTIFY","SCRI▓TIFY","S█RIPTIFY HUB","SCRIPTIFY H#B","▓CRIPTIFY HUB","SCRIPTIFY ▓UB","SCRIPTIFY HUB"}
 
     task.spawn(function()
-        local sweepDur   = 0.5
+        local sweepDur   = 0.6
         local sweepStart = tick()
         while tick() - sweepStart < sweepDur do
             local alpha = (tick() - sweepStart) / sweepDur
@@ -3991,26 +3972,26 @@ local function playOpeningAnimation(onComplete)
             RunService.Heartbeat:Wait()
         end
         scanline.Visible = false
-        task.wait(0.08)
+        task.wait(0.1)
 
         for _, g in ipairs(glitchChars) do
             mainLbl.Text = g
-            task.wait(0.06)
+            task.wait(0.07)
         end
         mainLbl.Text = "SCRIPTIFY HUB"
 
-        local lineDur   = 0.28
+        local lineDur   = 0.3
         local lineStart = tick()
         while tick() - lineStart < lineDur do
             local alpha = math.clamp((tick() - lineStart) / lineDur, 0, 1)
             local ease  = 1 - (1 - alpha)^3
-            accentLine.Size = UDim2.new(0, math.floor(260 * ease), 0, 2)
+            accentLine.Size = UDim2.new(0, math.floor(300 * ease), 0, 2)
             RunService.Heartbeat:Wait()
         end
-        accentLine.Size = UDim2.new(0, 260, 0, 2)
-        task.wait(0.28)
+        accentLine.Size = UDim2.new(0, 300, 0, 2)
+        task.wait(0.3)
 
-        local fadeDur   = 0.35
+        local fadeDur   = 0.4
         local fadeStart = tick()
         while tick() - fadeStart < fadeDur do
             local alpha = math.clamp((tick() - fadeStart) / fadeDur, 0, 1)
@@ -4024,240 +4005,330 @@ local function playOpeningAnimation(onComplete)
     end)
 end
 
--- =========================================================
--- MAIN GUI BUILD
--- =========================================================
+
+local autoSidedashEnabled            = true
+local autoSidedashWhenInRangeEnabled = true
+local autoBFChainEnabled             = false
+local blockM1Enabled                 = true
+
 local function buildGui()
     local pg = LocalPlayer:WaitForChild("PlayerGui")
 
-    -- ── Palette ──────────────────────────────────────────
-    local BG_SHEET   = Color3.fromRGB(14, 14, 18)     -- sheet background
-    local BG_CARD    = Color3.fromRGB(22, 22, 28)     -- card / row bg
-    local BG_TAB     = Color3.fromRGB(10, 10, 14)     -- tab bar bg
-    local ACCENT     = Color3.fromRGB(180, 25, 25)    -- red accent
-    local ACCENT2    = Color3.fromRGB(220, 50, 50)    -- lighter red
-    local ON_GREEN   = Color3.fromRGB(55, 200, 105)   -- toggle on
-    local OFF_GRAY   = Color3.fromRGB(55, 55, 65)     -- toggle off
-    local TEXT_PRI   = Color3.fromRGB(225, 222, 222)
-    local TEXT_SEC   = Color3.fromRGB(120, 118, 128)
-    local BORDER     = Color3.fromRGB(38, 38, 50)
-
-    -- ── Root ScreenGui ───────────────────────────────────
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name           = "ScriptifyHub"
+    screenGui.Name = "ScriptifyHub"
     screenGui.ResetOnSpawn   = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.IgnoreGuiInset = true
     screenGui.Parent         = pg
 
-    -- ── Sheet (bottom panel) ─────────────────────────────
-    -- Starts collapsed; user pulls up via the handle pill
-    local SHEET_FULL   = 560   -- px tall when expanded
-    local SHEET_PEEK   = 54    -- px tall when collapsed (just tab bar)
-    local sheetOpen    = false
+    local BG_MAIN   = Color3.fromRGB(18, 18, 22)
+    local BG_PANEL  = Color3.fromRGB(24, 24, 30)
+    local BG_ITEM   = Color3.fromRGB(30, 30, 38)
+    local BG_TAB    = Color3.fromRGB(20, 20, 26)
+    local TAB_SEL   = Color3.fromRGB(28, 28, 36)
+    local ACCENT    = Color3.fromRGB(160, 20, 20)
+    local ACCENT2   = Color3.fromRGB(200, 40, 40)
+    local TEXT_PRI  = Color3.fromRGB(220, 218, 218)
+    local TEXT_SEC  = Color3.fromRGB(130, 128, 135)
+    local TOGGLE_ON = Color3.fromRGB(60, 200, 110)
+    local BORDER    = Color3.fromRGB(40, 40, 52)
 
-    local sheet = Instance.new("Frame")
-    sheet.Name             = "Sheet"
-    sheet.Size             = UDim2.new(1, 0, 0, SHEET_PEEK)
-    sheet.Position         = UDim2.new(0, 0, 1, -SHEET_PEEK)
-    sheet.BackgroundColor3 = BG_SHEET
-    sheet.BorderSizePixel  = 0
-    sheet.ZIndex           = 15
-    sheet.ClipsDescendants = true
-    sheet.Parent           = screenGui
+    local TOTAL_W = 580
+    local TOTAL_H = 520
+    local TAB_W   = 130
+    local CONTENT_W = TOTAL_W - TAB_W
 
-    local sheetCorner = Instance.new("UICorner")
-    sheetCorner.CornerRadius = UDim.new(0, 16)
-    sheetCorner.Parent       = sheet
+    local container = Instance.new("Frame")
+    container.Name                   = "Container"
+    container.Size                   = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+    container.Position               = UDim2.new(0, 16, 0.5, -TOTAL_H / 2)
+    container.BackgroundColor3       = BG_MAIN
+    container.BorderSizePixel        = 0
+    container.Active                 = true
+    container.Draggable              = true
+    container.ClipsDescendants       = false
+    container.Parent                 = screenGui
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 12)
+    local rootStroke = Instance.new("UIStroke")
+    rootStroke.Color        = ACCENT
+    rootStroke.Thickness    = 1.5
+    rootStroke.Transparency = 0.4
+    rootStroke.Parent       = container
 
-    local sheetStroke = Instance.new("UIStroke")
-    sheetStroke.Color     = Color3.fromRGB(50, 50, 65)
-    sheetStroke.Thickness = 1.2
-    sheetStroke.Parent    = sheet
+    local titleBar = Instance.new("Frame")
+    titleBar.Name             = "TitleBar"
+    titleBar.Size             = UDim2.new(1, 0, 0, 38)
+    titleBar.BackgroundColor3 = Color3.fromRGB(13, 13, 17)
+    titleBar.BorderSizePixel  = 0
+    titleBar.ZIndex           = 5
+    titleBar.Parent           = container
+    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 12)
 
-    -- Drag handle / tap-to-open pill
-    local handleBar = Instance.new("TextButton")
-    handleBar.Name             = "HandleBar"
-    handleBar.Size             = UDim2.new(1, 0, 0, 40)
-    handleBar.Position         = UDim2.new(0, 0, 0, 0)
-    handleBar.BackgroundTransparency = 1
-    handleBar.Text             = ""
-    handleBar.ZIndex           = 20
-    handleBar.Parent           = sheet
+    local titleAccentLine = Instance.new("Frame")
+    titleAccentLine.Size             = UDim2.new(1, 0, 0, 1)
+    titleAccentLine.Position         = UDim2.new(0, 0, 1, -1)
+    titleAccentLine.BackgroundColor3 = ACCENT
+    titleAccentLine.BorderSizePixel  = 0
+    titleAccentLine.ZIndex           = 5
+    titleAccentLine.Parent           = titleBar
 
-    local pill = Instance.new("Frame")
-    pill.Size             = UDim2.new(0, 40, 0, 4)
-    pill.Position         = UDim2.new(0.5, -20, 0, 10)
-    pill.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-    pill.BorderSizePixel  = 0
-    pill.ZIndex           = 21
-    pill.Parent           = sheet
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(0, 2)
+    local titleIcon = Instance.new("TextLabel")
+    titleIcon.Size               = UDim2.new(0, 26, 1, 0)
+    titleIcon.Position           = UDim2.new(0, 10, 0, 0)
+    titleIcon.BackgroundTransparency = 1
+    titleIcon.Font               = Enum.Font.GothamBold
+    titleIcon.Text               = "✦"
+    titleIcon.TextColor3         = ACCENT2
+    titleIcon.TextSize           = 13
+    titleIcon.ZIndex             = 6
+    titleIcon.Parent             = titleBar
 
-    -- Status chip in handle bar
-    local statusBadge = Instance.new("TextLabel")
-    statusBadge.Size               = UDim2.new(0, 180, 0, 24)
-    statusBadge.Position           = UDim2.new(0.5, -90, 0, 16)
-    statusBadge.BackgroundColor3   = Color3.fromRGB(18, 18, 24)
-    statusBadge.BackgroundTransparency = 0.2
-    statusBadge.Font               = Enum.Font.GothamBold
-    statusBadge.Text               = "◈  No target"
-    statusBadge.TextColor3         = Color3.fromRGB(140, 50, 50)
-    statusBadge.TextSize           = 12
-    statusBadge.ZIndex             = 22
-    statusBadge.Parent             = sheet
-    Instance.new("UICorner", statusBadge).CornerRadius = UDim.new(0, 8)
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size               = UDim2.new(0, 120, 1, 0)
+    titleLbl.Position           = UDim2.new(0, 32, 0, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Font               = Enum.Font.GothamBold
+    titleLbl.Text = "SCRIPTIFY HUB"
+    titleLbl.TextColor3         = TEXT_PRI
+    titleLbl.TextSize           = 14
+    titleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    titleLbl.ZIndex             = 6
+    titleLbl.Parent             = titleBar
 
-    -- ── Sheet animation ───────────────────────────────────
-    local function animateSheet(toOpen)
-        sheetOpen     = toOpen
-        local targetH = toOpen and SHEET_FULL or SHEET_PEEK
-        local fromH   = toOpen and SHEET_PEEK or SHEET_FULL
-        local dur     = 0.28
-        local startT  = tick()
-        sheet.ClipsDescendants = true
-        while true do
-            local alpha = math.clamp((tick() - startT) / dur, 0, 1)
-            local ease  = 1 - (1 - alpha)^3
-            local h     = math.floor(fromH + (targetH - fromH) * ease)
-            sheet.Size     = UDim2.new(1, 0, 0, h)
-            sheet.Position = UDim2.new(0, 0, 1, -h)
-            if alpha >= 1 then break end
-            RunService.Heartbeat:Wait()
-        end
-        sheet.Size     = UDim2.new(1, 0, 0, targetH)
-        sheet.Position = UDim2.new(0, 0, 1, -targetH)
-    end
+    local statusTitleLbl = Instance.new("TextLabel")
+    statusTitleLbl.Size               = UDim2.new(0, 260, 1, 0)
+    statusTitleLbl.Position           = UDim2.new(0, 160, 0, 0)
+    statusTitleLbl.BackgroundTransparency = 1
+    statusTitleLbl.Font               = Enum.Font.Gotham
+    statusTitleLbl.Text               = "◈  No target locked"
+    statusTitleLbl.TextColor3         = Color3.fromRGB(140, 50, 50)
+    statusTitleLbl.TextSize           = 11
+    statusTitleLbl.TextXAlignment     = Enum.TextXAlignment.Center
+    statusTitleLbl.ZIndex             = 6
+    statusTitleLbl.Parent             = titleBar
 
-    handleBar.MouseButton1Click:Connect(function()
-        animateSheet(not sheetOpen)
-    end)
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Size             = UDim2.new(0, 26, 0, 26)
+    minimizeBtn.Position         = UDim2.new(1, -34, 0.5, -13)
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(28, 18, 18)
+    minimizeBtn.Font             = Enum.Font.GothamBold
+    minimizeBtn.Text             = "−"
+    minimizeBtn.TextColor3       = Color3.fromRGB(180, 180, 180)
+    minimizeBtn.TextSize         = 18
+    minimizeBtn.ZIndex           = 7
+    minimizeBtn.AutoButtonColor  = false
+    minimizeBtn.BorderSizePixel  = 0
+    minimizeBtn.Parent           = titleBar
+    Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 6)
+    local minStroke = Instance.new("UIStroke")
+    minStroke.Color     = Color3.fromRGB(80, 20, 20)
+    minStroke.Thickness = 1
+    minStroke.Parent    = minimizeBtn
 
-    -- ── Tab bar (bottom of sheet) ─────────────────────────
-    local TAB_BAR_H = 54
+    local body = Instance.new("Frame")
+    body.Name             = "Body"
+    body.Size             = UDim2.new(1, 0, 1, -38)
+    body.Position         = UDim2.new(0, 0, 0, 38)
+    body.BackgroundTransparency = 1
+    body.BorderSizePixel  = 0
+    body.Parent           = container
+
     local tabBar = Instance.new("Frame")
     tabBar.Name             = "TabBar"
-    tabBar.Size             = UDim2.new(1, 0, 0, TAB_BAR_H)
-    tabBar.Position         = UDim2.new(0, 0, 1, -TAB_BAR_H)
+    tabBar.Size             = UDim2.new(0, TAB_W, 1, 0)
     tabBar.BackgroundColor3 = BG_TAB
     tabBar.BorderSizePixel  = 0
-    tabBar.ZIndex           = 18
-    tabBar.Parent           = sheet
+    tabBar.Parent           = body
 
-    local tabTopLine = Instance.new("Frame")
-    tabTopLine.Size             = UDim2.new(1, 0, 0, 1)
-    tabTopLine.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    tabTopLine.BorderSizePixel  = 0
-    tabTopLine.ZIndex           = 19
-    tabTopLine.Parent           = tabBar
+    body.ClipsDescendants = true
+
+    local tabDivider = Instance.new("Frame")
+    tabDivider.Size             = UDim2.new(0, 1, 1, 0)
+    tabDivider.Position         = UDim2.new(1, -1, 0, 0)
+    tabDivider.BackgroundColor3 = BORDER
+    tabDivider.BorderSizePixel  = 0
+    tabDivider.ZIndex           = 2
+    tabDivider.Parent           = body
 
     local tabLayout = Instance.new("UIListLayout")
-    tabLayout.FillDirection       = Enum.FillDirection.Horizontal
-    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    tabLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
-    tabLayout.Padding             = UDim.new(0, 0)
+    tabLayout.Padding             = UDim.new(0, 2)
+    tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    tabLayout.FillDirection       = Enum.FillDirection.Vertical
+    tabLayout.SortOrder           = Enum.SortOrder.LayoutOrder
     tabLayout.Parent              = tabBar
 
-    -- ── Content area (between handle and tab bar) ─────────
-    local CONTENT_TOP = 44
-    local CONTENT_BOT = TAB_BAR_H
+    local tabPad = Instance.new("UIPadding")
+    tabPad.PaddingTop   = UDim.new(0, 8)
+    tabPad.PaddingLeft  = UDim.new(0, 4)
+    tabPad.PaddingRight = UDim.new(0, 4)
+    tabPad.Parent       = tabBar
 
-    local contentHost = Instance.new("Frame")
-    contentHost.Name             = "ContentHost"
-    contentHost.Size             = UDim2.new(1, 0, 1, -(CONTENT_TOP + CONTENT_BOT))
-    contentHost.Position         = UDim2.new(0, 0, 0, CONTENT_TOP)
-    contentHost.BackgroundTransparency = 1
-    contentHost.BorderSizePixel  = 0
-    contentHost.ClipsDescendants = true
-    contentHost.ZIndex           = 16
-    contentHost.Parent           = sheet
+    local contentPanel = Instance.new("Frame")
+    contentPanel.Name             = "ContentPanel"
+    contentPanel.Size             = UDim2.new(0, CONTENT_W, 1, 0)
+    contentPanel.Position         = UDim2.new(0, TAB_W, 0, 0)
+    contentPanel.BackgroundColor3 = BG_PANEL
+    contentPanel.BorderSizePixel  = 0
+    contentPanel.ClipsDescendants = true
+    contentPanel.Parent           = body
 
-    -- ── Helpers ───────────────────────────────────────────
-    local function makeScroll(parent)
-        local sf = Instance.new("ScrollingFrame")
-        sf.Size                   = UDim2.new(1, 0, 1, 0)
-        sf.BackgroundTransparency = 1
-        sf.BorderSizePixel        = 0
-        sf.ScrollBarThickness     = 3
-        sf.ScrollBarImageColor3   = ACCENT
-        sf.CanvasSize             = UDim2.new(0, 0, 0, 0)
-        sf.AutomaticCanvasSize    = Enum.AutomaticSize.Y
-        sf.Parent                 = parent
+    local tooltip = Instance.new("Frame")
+    tooltip.Name                   = "Tooltip"
+    tooltip.Size                   = UDim2.new(0, 220, 0, 60)
+    tooltip.Position               = UDim2.new(1, 8, 0, 0)
+    tooltip.BackgroundColor3       = Color3.fromRGB(12, 12, 16)
+    tooltip.BorderSizePixel        = 0
+    tooltip.ZIndex                 = 20
+    tooltip.Visible                = false
+    tooltip.Parent                 = container
+    Instance.new("UICorner", tooltip).CornerRadius = UDim.new(0, 8)
+    local tooltipStroke = Instance.new("UIStroke")
+    tooltipStroke.Color     = ACCENT
+    tooltipStroke.Thickness = 1
+    tooltipStroke.Parent    = tooltip
 
-        local layout = Instance.new("UIListLayout")
-        layout.Padding             = UDim.new(0, 8)
-        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout.SortOrder           = Enum.SortOrder.LayoutOrder
-        layout.Parent              = sf
+    local tooltipLbl = Instance.new("TextLabel")
+    tooltipLbl.Size               = UDim2.new(1, -12, 1, -8)
+    tooltipLbl.Position           = UDim2.new(0, 6, 0, 4)
+    tooltipLbl.BackgroundTransparency = 1
+    tooltipLbl.Font               = Enum.Font.Gotham
+    tooltipLbl.Text               = ""
+    tooltipLbl.TextColor3         = TEXT_PRI
+    tooltipLbl.TextSize           = 10
+    tooltipLbl.TextWrapped        = true
+    tooltipLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    tooltipLbl.TextYAlignment     = Enum.TextYAlignment.Top
+    tooltipLbl.ZIndex             = 21
+    tooltipLbl.Parent             = tooltip
 
-        local pad = Instance.new("UIPadding")
-        pad.PaddingTop    = UDim.new(0, 10)
-        pad.PaddingBottom = UDim.new(0, 18)
-        pad.PaddingLeft   = UDim.new(0, 12)
-        pad.PaddingRight  = UDim.new(0, 12)
-        pad.Parent        = sf
-
-        return sf
+    local function showTooltip(text, yPos)
+        tooltipLbl.Text  = text
+        local lines      = math.max(1, math.ceil(#text / 34))
+        tooltip.Size     = UDim2.new(0, 220, 0, 16 + lines * 14)
+        tooltip.Position = UDim2.new(1, 8, 0, yPos)
+        tooltip.Visible  = true
+    end
+    local function hideTooltip()
+        tooltip.Visible = false
     end
 
-    local function makeSectionLabel(parent, text, order)
-        local lbl = Instance.new("TextLabel")
-        lbl.Name               = "Sec_" .. text
-        lbl.Size               = UDim2.new(1, 0, 0, 26)
-        lbl.BackgroundTransparency = 1
-        lbl.Font               = Enum.Font.GothamBold
-        lbl.Text               = "  " .. text
-        lbl.TextColor3         = ACCENT2
-        lbl.TextSize           = 11
-        lbl.TextXAlignment     = Enum.TextXAlignment.Left
-        lbl.LayoutOrder        = order or 0
-        lbl.Parent             = parent
-        return lbl
+    local infoPanel = Instance.new("Frame")
+    infoPanel.Name                   = "InfoPanel"
+    infoPanel.Size                   = UDim2.new(0, 260, 0, 160)
+    infoPanel.Position               = UDim2.new(1, 12, 0, 40)
+    infoPanel.BackgroundColor3       = Color3.fromRGB(12, 12, 16)
+    infoPanel.BorderSizePixel        = 0
+    infoPanel.ZIndex                 = 20
+    infoPanel.Visible                = false
+    infoPanel.Parent                 = container
+    Instance.new("UICorner", infoPanel).CornerRadius = UDim.new(0, 10)
+    local infoPanelStroke = Instance.new("UIStroke")
+    infoPanelStroke.Color     = Color3.fromRGB(80, 0, 180)
+    infoPanelStroke.Thickness = 1.5
+    infoPanelStroke.Parent    = infoPanel
+
+    local infoPanelTitle = Instance.new("TextLabel")
+    infoPanelTitle.Size               = UDim2.new(1, -12, 0, 22)
+    infoPanelTitle.Position           = UDim2.new(0, 6, 0, 6)
+    infoPanelTitle.BackgroundTransparency = 1
+    infoPanelTitle.Font               = Enum.Font.GothamBold
+    infoPanelTitle.Text               = "ℹ  INFO"
+    infoPanelTitle.TextColor3         = Color3.fromRGB(160, 80, 255)
+    infoPanelTitle.TextSize           = 13
+    infoPanelTitle.TextXAlignment     = Enum.TextXAlignment.Left
+    infoPanelTitle.ZIndex             = 21
+    infoPanelTitle.Parent             = infoPanel
+
+    local infoDivider = Instance.new("Frame")
+    infoDivider.Size             = UDim2.new(1, -12, 0, 1)
+    infoDivider.Position         = UDim2.new(0, 6, 0, 30)
+    infoDivider.BackgroundColor3 = Color3.fromRGB(60, 30, 100)
+    infoDivider.BorderSizePixel  = 0
+    infoDivider.ZIndex           = 21
+    infoDivider.Parent           = infoPanel
+
+    local infoPanelLbl = Instance.new("TextLabel")
+    infoPanelLbl.Size               = UDim2.new(1, -12, 1, -38)
+    infoPanelLbl.Position           = UDim2.new(0, 6, 0, 36)
+    infoPanelLbl.BackgroundTransparency = 1
+    infoPanelLbl.Font               = Enum.Font.Gotham
+    infoPanelLbl.Text               = ""
+    infoPanelLbl.TextColor3         = TEXT_PRI
+    infoPanelLbl.TextSize           = 13
+    infoPanelLbl.TextWrapped        = true
+    infoPanelLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    infoPanelLbl.TextYAlignment     = Enum.TextYAlignment.Top
+    infoPanelLbl.ZIndex             = 21
+    infoPanelLbl.Parent             = infoPanel
+
+    local function showInfoPanel(title, text)
+        infoPanelTitle.Text = "ℹ  " .. title
+        infoPanelLbl.Text   = text
+        infoPanel.Visible   = true
     end
 
-    -- Toggle row: 52px tall for comfortable thumb tap
+    local infoPanelClose = Instance.new("TextButton")
+    infoPanelClose.Size             = UDim2.new(0, 18, 0, 18)
+    infoPanelClose.Position         = UDim2.new(1, -24, 0, 5)
+    infoPanelClose.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
+    infoPanelClose.Font             = Enum.Font.GothamBold
+    infoPanelClose.Text             = "✕"
+    infoPanelClose.TextColor3       = Color3.fromRGB(200, 200, 200)
+    infoPanelClose.TextSize         = 9
+    infoPanelClose.AutoButtonColor  = false
+    infoPanelClose.BorderSizePixel  = 0
+    infoPanelClose.ZIndex           = 22
+    infoPanelClose.Parent           = infoPanel
+    Instance.new("UICorner", infoPanelClose).CornerRadius = UDim.new(0, 4)
+    infoPanelClose.MouseButton1Click:Connect(function()
+        infoPanel.Visible = false
+    end)
+
+    container.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if infoPanel.Visible then infoPanel.Visible = false end
+        end
+    end)
+
     local function makeToggleRow(parent, labelText, isOnDefault, order)
         local row = Instance.new("Frame")
-        row.Name             = "Toggle_" .. labelText
-        row.Size             = UDim2.new(1, 0, 0, 52)
-        row.BackgroundColor3 = BG_CARD
+        row.Name             = "Row_" .. labelText
+        row.Size             = UDim2.new(1, -16, 0, 36)
+        row.BackgroundColor3 = BG_ITEM
         row.BorderSizePixel  = 0
         row.LayoutOrder      = order or 0
         row.Parent           = parent
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
-        local s = Instance.new("UIStroke")
-        s.Color     = BORDER
-        s.Thickness = 1
-        s.Parent    = row
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+        local rowStroke = Instance.new("UIStroke")
+        rowStroke.Color     = BORDER
+        rowStroke.Thickness = 1
+        rowStroke.Parent    = row
 
         local lbl = Instance.new("TextLabel")
-        lbl.Size               = UDim2.new(1, -72, 1, 0)
-        lbl.Position           = UDim2.new(0, 14, 0, 0)
+        lbl.Size               = UDim2.new(1, -60, 1, 0)
+        lbl.Position           = UDim2.new(0, 12, 0, 0)
         lbl.BackgroundTransparency = 1
         lbl.Font               = Enum.Font.GothamBold
         lbl.Text               = labelText
         lbl.TextColor3         = TEXT_PRI
-        lbl.TextSize           = 13
+        lbl.TextSize           = 11
         lbl.TextXAlignment     = Enum.TextXAlignment.Left
-        lbl.TextWrapped        = true
         lbl.Parent             = row
 
-        -- Pill toggle (44x24)
         local pillBg = Instance.new("Frame")
-        pillBg.Size             = UDim2.new(0, 44, 0, 24)
-        pillBg.Position         = UDim2.new(1, -54, 0.5, -12)
-        pillBg.BackgroundColor3 = isOnDefault and ON_GREEN or OFF_GRAY
+        pillBg.Size             = UDim2.new(0, 36, 0, 20)
+        pillBg.Position         = UDim2.new(1, -46, 0.5, -10)
+        pillBg.BackgroundColor3 = isOnDefault and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
         pillBg.BorderSizePixel  = 0
         pillBg.Parent           = row
-        Instance.new("UICorner", pillBg).CornerRadius = UDim.new(0, 12)
+        Instance.new("UICorner", pillBg).CornerRadius = UDim.new(0, 10)
 
         local knob = Instance.new("Frame")
-        knob.Size             = UDim2.new(0, 18, 0, 18)
-        knob.Position         = isOnDefault and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+        knob.Size             = UDim2.new(0, 14, 0, 14)
+        knob.Position         = isOnDefault and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
         knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         knob.BorderSizePixel  = 0
         knob.Parent           = pillBg
-        Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 9)
+        Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 7)
 
         local isOn = isOnDefault
 
@@ -4266,58 +4337,112 @@ local function buildGui()
         clickBtn.BackgroundTransparency = 1
         clickBtn.Text               = ""
         clickBtn.BorderSizePixel    = 0
-        clickBtn.ZIndex             = 3
+        clickBtn.ZIndex             = 2
         clickBtn.Parent             = row
 
-        local TW = TweenInfo.new(0.14, Enum.EasingStyle.Quad)
         local function setOn(val)
             isOn = val
-            TweenService:Create(pillBg, TW, {BackgroundColor3 = val and ON_GREEN or OFF_GRAY}):Play()
-            TweenService:Create(knob,   TW, {Position = val
-                and UDim2.new(1, -21, 0.5, -9)
-                or  UDim2.new(0,  3, 0.5, -9)}):Play()
+            local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            TweenService:Create(pillBg, tweenInfo, {
+                BackgroundColor3 = isOn and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
+            }):Play()
+            TweenService:Create(knob, tweenInfo, {
+                Position = isOn and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+            }):Play()
         end
+
         local function toggle() setOn(not isOn); return isOn end
         local function getState() return isOn end
 
         return row, clickBtn, toggle, getState, lbl, setOn
     end
 
-    local function makeValueRow(parent, labelText, defaultVal, minVal, maxVal, onChanged, order)
+    local function makeKeybindRow(parent, labelText, defaultKey, order)
         local row = Instance.new("Frame")
-        row.Name             = "Value_" .. labelText
-        row.Size             = UDim2.new(1, 0, 0, 48)
-        row.BackgroundColor3 = BG_CARD
+        row.Name             = "Keybind_" .. labelText
+        row.Size             = UDim2.new(1, -16, 0, 30)
+        row.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
         row.BorderSizePixel  = 0
         row.LayoutOrder      = order or 0
         row.Parent           = parent
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
-        local rs = Instance.new("UIStroke"); rs.Color = BORDER; rs.Thickness = 1; rs.Parent = row
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+        local rStroke = Instance.new("UIStroke")
+        rStroke.Color     = BORDER
+        rStroke.Thickness = 1
+        rStroke.Parent    = row
 
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Size               = UDim2.new(0.6, 0, 1, 0)
-        nameLbl.Position           = UDim2.new(0, 14, 0, 0)
+        nameLbl.Position           = UDim2.new(0, 10, 0, 0)
         nameLbl.BackgroundTransparency = 1
         nameLbl.Font               = Enum.Font.Gotham
         nameLbl.Text               = labelText
         nameLbl.TextColor3         = TEXT_SEC
-        nameLbl.TextSize           = 12
+        nameLbl.TextSize           = 10
+        nameLbl.TextXAlignment     = Enum.TextXAlignment.Left
+        nameLbl.Parent             = row
+
+        local keyBtn = Instance.new("TextButton")
+        keyBtn.Size             = UDim2.new(0, 64, 0, 20)
+        keyBtn.Position         = UDim2.new(1, -72, 0.5, -10)
+        keyBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+        keyBtn.Font             = Enum.Font.GothamBold
+        keyBtn.Text             = defaultKey
+        keyBtn.TextColor3       = ACCENT2
+        keyBtn.TextSize         = 10
+        keyBtn.AutoButtonColor  = false
+        keyBtn.BorderSizePixel  = 0
+        keyBtn.Parent           = row
+        Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 5)
+        local kStroke = Instance.new("UIStroke")
+        kStroke.Color     = Color3.fromRGB(100, 20, 20)
+        kStroke.Thickness = 1
+        kStroke.Parent    = keyBtn
+
+        return row, keyBtn
+    end
+
+    local function makeValueRow(parent, labelText, defaultVal, minVal, maxVal, onChanged, order)
+        local row = Instance.new("Frame")
+        row.Name             = "Value_" .. labelText
+        row.Size             = UDim2.new(1, -16, 0, 30)
+        row.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+        row.BorderSizePixel  = 0
+        row.LayoutOrder      = order or 0
+        row.Parent           = parent
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+        local rStroke = Instance.new("UIStroke")
+        rStroke.Color     = BORDER
+        rStroke.Thickness = 1
+        rStroke.Parent    = row
+
+        local nameLbl = Instance.new("TextLabel")
+        nameLbl.Size               = UDim2.new(0.6, 0, 1, 0)
+        nameLbl.Position           = UDim2.new(0, 10, 0, 0)
+        nameLbl.BackgroundTransparency = 1
+        nameLbl.Font               = Enum.Font.Gotham
+        nameLbl.Text               = labelText
+        nameLbl.TextColor3         = TEXT_SEC
+        nameLbl.TextSize           = 10
         nameLbl.TextXAlignment     = Enum.TextXAlignment.Left
         nameLbl.Parent             = row
 
         local box = Instance.new("TextBox")
-        box.Size             = UDim2.new(0, 80, 0, 32)
-        box.Position         = UDim2.new(1, -90, 0.5, -16)
-        box.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+        box.Size             = UDim2.new(0, 64, 0, 20)
+        box.Position         = UDim2.new(1, -72, 0.5, -10)
+        box.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
         box.Font             = Enum.Font.GothamBold
         box.Text             = tostring(defaultVal)
         box.TextColor3       = ACCENT2
-        box.TextSize         = 13
+        box.TextSize         = 10
         box.ClearTextOnFocus = false
         box.BorderSizePixel  = 0
         box.Parent           = row
-        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
-        local bs = Instance.new("UIStroke"); bs.Color = Color3.fromRGB(100,20,20); bs.Thickness = 1; bs.Parent = box
+        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 5)
+        local bStroke = Instance.new("UIStroke")
+        bStroke.Color     = Color3.fromRGB(100, 20, 20)
+        bStroke.Thickness = 1
+        bStroke.Parent    = box
 
         box.FocusLost:Connect(function()
             local num = tonumber(box.Text)
@@ -4333,158 +4458,361 @@ local function buildGui()
         return row, box
     end
 
-    local function makeActionButton(parent, text, bgColor, textColor, strokeColor, order)
-        local btn = Instance.new("TextButton")
-        btn.Name             = "Btn_" .. text
-        btn.Size             = UDim2.new(1, 0, 0, 52)
-        btn.BackgroundColor3 = bgColor
-        btn.Font             = Enum.Font.GothamBold
-        btn.Text             = text
-        btn.TextColor3       = textColor
-        btn.TextSize         = 14
-        btn.AutoButtonColor  = false
-        btn.BorderSizePixel  = 0
-        btn.LayoutOrder      = order or 0
-        btn.Parent           = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
-        local st = Instance.new("UIStroke")
-        st.Color     = strokeColor
-        st.Thickness = 1.5
-        st.Parent    = btn
-        return btn
+    local function makeSectionLabel(parent, text, order)
+        local lbl = Instance.new("TextLabel")
+        lbl.Name               = "SectionLbl_" .. text
+        lbl.Size               = UDim2.new(1, -16, 0, 22)
+        lbl.BackgroundTransparency = 1
+        lbl.Font               = Enum.Font.GothamBold
+        lbl.Text               = text
+        lbl.TextColor3         = ACCENT
+        lbl.TextSize           = 10
+        lbl.TextXAlignment     = Enum.TextXAlignment.Left
+        lbl.LayoutOrder        = order or 0
+        lbl.Parent             = parent
+        return lbl
     end
 
     local function makeStatusChip(parent, text, color, order)
         local chip = Instance.new("TextLabel")
-        chip.Size               = UDim2.new(1, 0, 0, 36)
+        chip.Size               = UDim2.new(1, -16, 0, 26)
         chip.BackgroundColor3   = Color3.fromRGB(16, 16, 22)
+        chip.BackgroundTransparency = 0
         chip.Font               = Enum.Font.GothamBold
         chip.Text               = text
         chip.TextColor3         = color
-        chip.TextSize           = 12
+        chip.TextSize           = 10
         chip.TextXAlignment     = Enum.TextXAlignment.Center
         chip.BorderSizePixel    = 0
         chip.LayoutOrder        = order or 0
         chip.Parent             = parent
-        Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 8)
-        local s = Instance.new("UIStroke"); s.Color = BORDER; s.Thickness = 1; s.Parent = chip
+        Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 7)
+        local s = Instance.new("UIStroke")
+        s.Color     = BORDER
+        s.Thickness = 1
+        s.Parent    = chip
         return chip
     end
 
-    -- ── Tab system ────────────────────────────────────────
+    local function makeInfoBtn(parent, xOffset, infoTitle, infoText)
+        local btn = Instance.new("TextButton")
+        btn.Size             = UDim2.new(0, 80, 0, 22)
+        btn.Position         = UDim2.new(0, xOffset, 0.5, -11)
+        btn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
+        btn.Font             = Enum.Font.Gotham
+        btn.Text             = "ℹ  what is this?"
+        btn.TextColor3       = Color3.fromRGB(160, 80, 255)
+        btn.TextSize         = 9
+        btn.AutoButtonColor  = false
+        btn.BorderSizePixel  = 0
+        btn.ZIndex           = 3
+        btn.Parent           = parent
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+        local s = Instance.new("UIStroke")
+        s.Color     = Color3.fromRGB(80, 30, 140)
+        s.Thickness = 1
+        s.Parent    = btn
+        btn.MouseButton1Click:Connect(function()
+            showInfoPanel(infoTitle, infoText)
+        end)
+        return btn
+    end
+
     local tabs      = {}
     local tabFrames = {}
     local activeTab = nil
 
-    local TAB_DEFS = {
-        { name = "COMBAT", icon = "⚔",  order = 1 },
-        { name = "YUJI",   icon = "⚡",  order = 2 },
-        { name = "FLIGHT", icon = "✈",  order = 3 },
-        { name = "CDs",    icon = "⏱",  order = 4 },
-    }
+    local function buildScrollFor(parent)
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size                   = UDim2.new(1, 0, 1, 0)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel        = 0
+        scroll.ScrollBarThickness     = 3
+        scroll.ScrollBarImageColor3   = ACCENT
+        scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+        scroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+        scroll.Parent                 = parent
 
-    local function selectTab(name)
-        if activeTab then
-            tabs[activeTab].btn.TextColor3       = TEXT_SEC
-            tabs[activeTab].btn.BackgroundColor3 = Color3.fromRGB(0,0,0,0)
-            tabs[activeTab].btn.BackgroundTransparency = 1
-            tabs[activeTab].indicator.BackgroundTransparency = 1
-            tabFrames[activeTab].frame.Visible   = false
-        end
-        activeTab = name
-        tabs[name].btn.TextColor3       = ACCENT2
-        tabs[name].btn.BackgroundColor3 = Color3.fromRGB(30,10,10)
-        tabs[name].btn.BackgroundTransparency = 0
-        tabs[name].indicator.BackgroundTransparency = 0
-        tabFrames[name].frame.Visible   = true
+        local layout = Instance.new("UIListLayout")
+        layout.Padding             = UDim.new(0, 6)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.SortOrder           = Enum.SortOrder.LayoutOrder
+        layout.Parent              = scroll
 
-        -- auto-open sheet when a tab is tapped
-        if not sheetOpen then animateSheet(true) end
+        local pad = Instance.new("UIPadding")
+        pad.PaddingTop    = UDim.new(0, 10)
+        pad.PaddingBottom = UDim.new(0, 14)
+        pad.PaddingLeft   = UDim.new(0, 8)
+        pad.PaddingRight  = UDim.new(0, 8)
+        pad.Parent        = scroll
+
+        return scroll
     end
 
-    local tabW = math.floor(100 / #TAB_DEFS)
-    for _, td in ipairs(TAB_DEFS) do
-        local btn = Instance.new("TextButton")
-        btn.Name             = "Tab_" .. td.name
-        btn.Size             = UDim2.new(0, tabW, 1, 0)
-        -- size will be overridden by layout; use UDim2 with equal share
-        btn.Size             = UDim2.new(1 / #TAB_DEFS, 0, 1, 0)
-        btn.BackgroundTransparency = 1
-        btn.Font             = Enum.Font.GothamBold
-        btn.Text             = td.icon .. "\n" .. td.name
-        btn.TextColor3       = TEXT_SEC
-        btn.TextSize         = 11
-        btn.AutoButtonColor  = false
-        btn.BorderSizePixel  = 0
-        btn.ZIndex           = 20
-        btn.Parent           = tabBar
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    local function addTab(name, icon, order)
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Name             = "Tab_" .. name
+        tabBtn.Size             = UDim2.new(1, 0, 0, 38)
+        tabBtn.BackgroundColor3 = BG_TAB
+        tabBtn.Font             = Enum.Font.GothamBold
+        tabBtn.Text             = icon .. "  " .. name
+        tabBtn.TextColor3       = TEXT_SEC
+        tabBtn.TextSize         = 11
+        tabBtn.AutoButtonColor  = false
+        tabBtn.BorderSizePixel  = 0
+        tabBtn.LayoutOrder      = order
+        tabBtn.Parent           = tabBar
+        Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 8)
 
-        -- active indicator line at top of tab button
-        local indicator = Instance.new("Frame")
-        indicator.Size             = UDim2.new(0.6, 0, 0, 2)
-        indicator.Position         = UDim2.new(0.2, 0, 0, 0)
-        indicator.BackgroundColor3 = ACCENT2
-        indicator.BorderSizePixel  = 0
-        indicator.BackgroundTransparency = 1
-        indicator.ZIndex           = 21
-        indicator.Parent           = btn
-        Instance.new("UICorner", indicator).CornerRadius = UDim.new(0, 1)
+        local selBar = Instance.new("Frame")
+        selBar.Size             = UDim2.new(0, 3, 0.7, 0)
+        selBar.Position         = UDim2.new(0, 0, 0.15, 0)
+        selBar.BackgroundColor3 = ACCENT2
+        selBar.BorderSizePixel  = 0
+        selBar.Visible          = false
+        selBar.Parent           = tabBtn
+        Instance.new("UICorner", selBar).CornerRadius = UDim.new(0, 2)
 
         local frame = Instance.new("Frame")
-        frame.Name             = "Content_" .. td.name
+        frame.Name             = "Content_" .. name
         frame.Size             = UDim2.new(1, 0, 1, 0)
         frame.BackgroundTransparency = 1
         frame.BorderSizePixel  = 0
         frame.Visible          = false
-        frame.Parent           = contentHost
+        frame.Parent           = contentPanel
 
-        local scroll = makeScroll(frame)
+        local scroll = buildScrollFor(frame)
 
-        tabs[td.name]      = { btn = btn, indicator = indicator }
-        tabFrames[td.name] = { frame = frame, scroll = scroll }
+        tabs[name]      = { btn = tabBtn, selBar = selBar }
+        tabFrames[name] = { frame = frame, scroll = scroll }
 
-        btn.MouseButton1Click:Connect(function() selectTab(td.name) end)
+        tabBtn.MouseButton1Click:Connect(function()
+            if activeTab then
+                tabs[activeTab].btn.TextColor3       = TEXT_SEC
+                tabs[activeTab].btn.BackgroundColor3 = BG_TAB
+                tabs[activeTab].selBar.Visible       = false
+                tabFrames[activeTab].frame.Visible   = false
+            end
+            activeTab                  = name
+            tabBtn.TextColor3          = TEXT_PRI
+            tabBtn.BackgroundColor3    = TAB_SEL
+            selBar.Visible             = true
+            frame.Visible              = true
+        end)
+
+        return scroll
     end
 
-    -- select first tab by default
-    selectTab("COMBAT")
-    tabFrames["COMBAT"].frame.Visible = true
+    local combatScroll  = addTab("COMBAT",  "⚔",  1)
+    local yujiScroll    = addTab("YUJI",    "⚡",  2)
+    local flightScroll  = addTab("FLIGHT",  "✈",  3)
+    local cdScroll      = addTab("CDs",     "⏱",  4)
 
-    -- ═══════════════════════════════════════════════════
-    -- COMBAT TAB
-    -- ═══════════════════════════════════════════════════
+    tabs["COMBAT"].btn.TextColor3       = TEXT_PRI
+    tabs["COMBAT"].btn.BackgroundColor3 = TAB_SEL
+    tabs["COMBAT"].selBar.Visible       = true
+    tabFrames["COMBAT"].frame.Visible   = true
+    activeTab = "COMBAT"
+
     do
-        local s = tabFrames["COMBAT"].scroll
+        local s = combatScroll
 
-        -- Invisibility
-        makeSectionLabel(s, "INVISIBILITY", 1)
         local invisRow, invisClick, invisToggle, invisGet, _, invisSetOn =
-            makeToggleRow(s, "INVISIBILITY  —  makes your char semi-transparent", false, 2)
+            makeToggleRow(s, "INVISIBILITY", false, 1)
+
+        makeInfoBtn(invisRow, 118,
+            "INVISIBILITY",
+            "Turning this on will make you fully invisible however players with lock on can still lock onto you so be careful")
+
         invisClick.MouseButton1Click:Connect(function()
             invisToggle()
             INVIS.Enabled = invisGet()
             if INVIS.Enabled then startInvis() else stopInvis() end
         end)
-        function GUI_API.SetInvisState(isOn) invisSetOn(isOn) end
 
-        -- Lock-On
-        makeSectionLabel(s, "LOCK-ON", 3)
+        function GUI_API.SetInvisState(isOn)
+            invisSetOn(isOn)
+        end
 
-        local lockBtn = makeActionButton(s,
-            "Toggle Lock-On",
-            Color3.fromRGB(22, 60, 120),
-            Color3.fromRGB(180, 210, 255),
-            Color3.fromRGB(35, 90, 180), 4)
-        lockBtn.MouseButton1Click:Connect(function()
-            ToggleLockOn()
+        makeSectionLabel(s, "LOCK-ON", 2)
+
+        local lockBtn = Instance.new("TextButton")
+        lockBtn.Name             = "LockOnBtn"
+        lockBtn.Size             = UDim2.new(1, -16, 0, 36)
+        lockBtn.BackgroundColor3 = Color3.fromRGB(25, 70, 130)
+        lockBtn.Font             = Enum.Font.GothamBold
+        lockBtn.Text             = "Toggle Lock-On"
+        lockBtn.TextColor3       = Color3.fromRGB(200, 220, 255)
+        lockBtn.TextSize         = 12
+        lockBtn.AutoButtonColor  = false
+        lockBtn.BorderSizePixel  = 0
+        lockBtn.LayoutOrder      = 3
+        lockBtn.Parent           = s
+        Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 8)
+        local lbStroke = Instance.new("UIStroke")
+        lbStroke.Color     = Color3.fromRGB(40, 100, 180)
+        lbStroke.Thickness = 1
+        lbStroke.Parent    = lockBtn
+        lockBtn.MouseButton1Click:Connect(ToggleLockOn)
+
+        local lockCircleEnabled = true
+        local lockCircleGui     = nil
+
+        local function buildLockCircle()
+            if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end
+            local pg = LocalPlayer:WaitForChild("PlayerGui")
+            local sg = Instance.new("ScreenGui")
+            sg.Name           = "LockCircleGui"
+            sg.ResetOnSpawn   = false
+            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            sg.Parent         = pg
+            lockCircleGui = sg
+
+            local circle = Instance.new("TextButton")
+            circle.Size             = UDim2.new(0, 64, 0, 64)
+            circle.Position         = UDim2.new(0, 16, 0.5, -32)
+            circle.BackgroundColor3 = Color3.fromRGB(25, 70, 130)
+            circle.Font             = Enum.Font.GothamBold
+            circle.Text             = "LOCK"
+            circle.TextColor3       = Color3.fromRGB(200, 220, 255)
+            circle.TextSize         = 13
+            circle.AutoButtonColor  = false
+            circle.BorderSizePixel  = 0
+            circle.Active           = true
+            circle.Draggable        = true
+            circle.ZIndex           = 10
+            circle.Parent           = sg
+            Instance.new("UICorner", circle).CornerRadius = UDim.new(0.5, 0)
+            local cStroke = Instance.new("UIStroke")
+            cStroke.Color     = Color3.fromRGB(40, 100, 180)
+            cStroke.Thickness = 2
+            cStroke.Parent    = circle
+
+            local function refreshCircle()
+                if State.Locked then
+                    circle.BackgroundColor3 = Color3.fromRGB(120, 20, 20)
+                    circle.TextColor3       = Color3.fromRGB(255, 180, 180)
+                    cStroke.Color           = Color3.fromRGB(160, 30, 30)
+                    circle.Text             = "UNLOCK"
+                    circle.TextSize         = 10
+                else
+                    circle.BackgroundColor3 = Color3.fromRGB(25, 70, 130)
+                    circle.TextColor3       = Color3.fromRGB(200, 220, 255)
+                    cStroke.Color           = Color3.fromRGB(40, 100, 180)
+                    circle.Text             = "LOCK"
+                    circle.TextSize         = 13
+                end
+            end
+
+            circle.MouseButton1Click:Connect(function()
+                ToggleLockOn()
+                refreshCircle()
+            end)
+
+            RunService.Heartbeat:Connect(function()
+                if not lockCircleGui then return end
+                refreshCircle()
+            end)
+        end
+
+        local lcRow, lcClick, lcToggle, lcGet, _, lcSetOn =
+            makeToggleRow(s, "LOCK CIRCLE BUTTON", true, 4)
+        makeInfoBtn(lcRow, 140,
+            "LOCK CIRCLE BUTTON",
+            "Shows a draggable circular LOCK button on the left side of your screen. Click it to toggle lock-on without needing a keyboard key.")
+
+        if lockCircleEnabled then buildLockCircle() end
+
+        lcClick.MouseButton1Click:Connect(function()
+            lcToggle()
+            lockCircleEnabled = lcGet()
+            if lockCircleEnabled then
+                buildLockCircle()
+            else
+                if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end
+            end
         end)
 
-        local slRow, slClick, slToggle, slGet, _, slSetOn =
-            makeToggleRow(s, "SOFT LOCK  —  select target without locking camera", false, 5)
-        slClick.MouseButton1Click:Connect(function()
-            slToggle()
-            State.softLockEnabled = slGet()
+        local slRow = Instance.new("Frame")
+        slRow.Name             = "SoftLockRow"
+        slRow.Size             = UDim2.new(1, -16, 0, 36)
+        slRow.BackgroundColor3 = BG_ITEM
+        slRow.BorderSizePixel  = 0
+        slRow.LayoutOrder      = 5
+        slRow.Parent           = s
+        Instance.new("UICorner", slRow).CornerRadius = UDim.new(0, 8)
+        local slStroke = Instance.new("UIStroke")
+        slStroke.Color     = BORDER
+        slStroke.Thickness = 1
+        slStroke.Parent    = slRow
+
+        local slLbl = Instance.new("TextLabel")
+        slLbl.Size               = UDim2.new(0, 100, 1, 0)
+        slLbl.Position           = UDim2.new(0, 12, 0, 0)
+        slLbl.BackgroundTransparency = 1
+        slLbl.Font               = Enum.Font.GothamBold
+        slLbl.Text               = "SOFT LOCK"
+        slLbl.TextColor3         = TEXT_PRI
+        slLbl.TextSize           = 11
+        slLbl.TextXAlignment     = Enum.TextXAlignment.Left
+        slLbl.Parent             = slRow
+
+        local slInfoBtn = Instance.new("TextButton")
+        slInfoBtn.Size             = UDim2.new(0, 80, 0, 22)
+        slInfoBtn.Position         = UDim2.new(0, 112, 0.5, -11)
+        slInfoBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
+        slInfoBtn.Font             = Enum.Font.Gotham
+        slInfoBtn.Text             = "ℹ  what is this?"
+        slInfoBtn.TextColor3       = Color3.fromRGB(160, 80, 255)
+        slInfoBtn.TextSize         = 9
+        slInfoBtn.AutoButtonColor  = false
+        slInfoBtn.BorderSizePixel  = 0
+        slInfoBtn.ZIndex           = 3
+        slInfoBtn.Parent           = slRow
+        Instance.new("UICorner", slInfoBtn).CornerRadius = UDim.new(0, 5)
+        local slInfoStroke = Instance.new("UIStroke")
+        slInfoStroke.Color     = Color3.fromRGB(80, 30, 140)
+        slInfoStroke.Thickness = 1
+        slInfoStroke.Parent    = slInfoBtn
+        slInfoBtn.MouseButton1Click:Connect(function()
+            showInfoPanel("SOFT LOCK", "Soft Lock lets you select a target and use all features like auto block and sidedash — without locking your character rotation to them.")
+        end)
+
+        local slPillBg = Instance.new("Frame")
+        slPillBg.Size             = UDim2.new(0, 36, 0, 20)
+        slPillBg.Position         = UDim2.new(1, -46, 0.5, -10)
+        slPillBg.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+        slPillBg.BorderSizePixel  = 0
+        slPillBg.Parent           = slRow
+        Instance.new("UICorner", slPillBg).CornerRadius = UDim.new(0, 10)
+
+        local slKnob = Instance.new("Frame")
+        slKnob.Size             = UDim2.new(0, 14, 0, 14)
+        slKnob.Position         = UDim2.new(0, 3, 0.5, -7)
+        slKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        slKnob.BorderSizePixel  = 0
+        slKnob.Parent           = slPillBg
+        Instance.new("UICorner", slKnob).CornerRadius = UDim.new(0, 7)
+
+        local slIsOn = false
+        local slClickBtn = Instance.new("TextButton")
+        slClickBtn.Size               = UDim2.new(1, 0, 1, 0)
+        slClickBtn.BackgroundTransparency = 1
+        slClickBtn.Text               = ""
+        slClickBtn.BorderSizePixel    = 0
+        slClickBtn.ZIndex             = 2
+        slClickBtn.Parent             = slRow
+
+        local function setSoftLock(val)
+            slIsOn = val
+            local ti = TweenInfo.new(0.15, Enum.EasingStyle.Quad)
+            TweenService:Create(slPillBg, ti, {BackgroundColor3 = val and TOGGLE_ON or Color3.fromRGB(60,60,70)}):Play()
+            TweenService:Create(slKnob,   ti, {Position = val and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)}):Play()
+        end
+
+        slClickBtn.MouseButton1Click:Connect(function()
+            setSoftLock(not slIsOn)
+            State.softLockEnabled = slIsOn
             if not State.softLockEnabled and State.AntiTeamingEnabled then
                 clearAllMultiTargets()
                 if GUI_API.SetStatus then GUI_API.SetStatus(false, nil) end
@@ -4502,120 +4830,60 @@ local function buildGui()
             end
         end)
 
-        -- Lock circle floating button
-        local lockCircleEnabled = true
-        local lockCircleGui     = nil
+        function GUI_API.SetAntiTeamClearKeyLabel(k) end
 
-        local function buildLockCircle()
-            if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end
-            local sg = Instance.new("ScreenGui")
-            sg.Name           = "LockCircleGui"
-            sg.ResetOnSpawn   = false
-            sg.IgnoreGuiInset = true
-            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            sg.Parent         = pg
+        makeSectionLabel(s, "AUTO BLOCK", 6)
 
-            local circle = Instance.new("TextButton")
-            circle.Size             = UDim2.new(0, 80, 0, 80)
-            circle.Position         = UDim2.new(0, 18, 0.5, -110)
-            circle.BackgroundColor3 = Color3.fromRGB(22, 60, 120)
-            circle.Font             = Enum.Font.GothamBold
-            circle.Text             = "LOCK"
-            circle.TextColor3       = Color3.fromRGB(180, 215, 255)
-            circle.TextSize         = 14
-            circle.AutoButtonColor  = false
-            circle.BorderSizePixel  = 0
-            circle.Active           = true
-            circle.Draggable        = true
-            circle.ZIndex           = 30
-            circle.Parent           = sg
-            Instance.new("UICorner", circle).CornerRadius = UDim.new(0.5, 0)
-            local cSt = Instance.new("UIStroke"); cSt.Color = Color3.fromRGB(40,100,180); cSt.Thickness = 2.5; cSt.Parent = circle
-
-            local function refreshCircle()
-                if State.Locked then
-                    circle.BackgroundColor3 = Color3.fromRGB(110,18,18)
-                    circle.TextColor3       = Color3.fromRGB(255,170,170)
-                    cSt.Color               = Color3.fromRGB(160,28,28)
-                    circle.Text             = "UNLOCK"
-                    circle.TextSize         = 11
-                else
-                    circle.BackgroundColor3 = Color3.fromRGB(22,60,120)
-                    circle.TextColor3       = Color3.fromRGB(180,215,255)
-                    cSt.Color               = Color3.fromRGB(40,100,180)
-                    circle.Text             = "LOCK"
-                    circle.TextSize         = 14
-                end
-            end
-
-            circle.MouseButton1Click:Connect(function()
-                ToggleLockOn(); refreshCircle()
-            end)
-            RunService.Heartbeat:Connect(function()
-                if not lockCircleGui then return end
-                refreshCircle()
-            end)
-            lockCircleGui = sg
-        end
-
-        local lcRow, lcClick, lcToggle, lcGet =
-            makeToggleRow(s, "LOCK CIRCLE BUTTON  —  floating on-screen button", true, 6)
-        if lockCircleEnabled then buildLockCircle() end
-        lcClick.MouseButton1Click:Connect(function()
-            lcToggle()
-            lockCircleEnabled = lcGet()
-            if lockCircleEnabled then buildLockCircle()
-            else if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end end
-        end)
-
-        -- Auto Block
-        makeSectionLabel(s, "AUTO BLOCK", 7)
-        local abRow, abClick, abToggle, abGet = makeToggleRow(s, "AUTO BLOCK", true, 8)
+        local abRow, abClick, abToggle, abGet = makeToggleRow(s, "AUTO BLOCK", true, 7)
         abClick.MouseButton1Click:Connect(function() abToggle(); State.autoBlockEnabled = abGet() end)
 
-        local beRow, beClick, beToggle, beGet = makeToggleRow(s, "BLOCK EVERYTHING  —  blocks most moves", true, 9)
+        local beRow, beClick, beToggle, beGet = makeToggleRow(s, "BLOCK EVERYTHING", true, 8)
         beClick.MouseButton1Click:Connect(function() beToggle(); State.blockEverythingEnabled = beGet() end)
+        makeInfoBtn(beRow, 130, "BLOCK EVERYTHING", "Blocks most blockable moves from most characters. Highly recommended to keep enabled.")
 
-        local apRow, apClick, apToggle, apGet = makeToggleRow(s, "AUTO PUNISH", true, 10)
+        local apRow, apClick, apToggle, apGet = makeToggleRow(s, "AUTO PUNISH", true, 9)
         apClick.MouseButton1Click:Connect(function() apToggle(); State.autoPunishEnabled = apGet() end)
 
-        -- Sidedash
-        makeSectionLabel(s, "SIDEDASH", 11)
+        makeSectionLabel(s, "SIDEDASH", 10)
 
-        local sdRow, sdClick, sdToggle, sdGet = makeToggleRow(s, "AUTO SIDEDASH", true, 12)
+        local sdRow, sdClick, sdToggle, sdGet = makeToggleRow(s, "AUTO SIDEDASH", true, 11)
         sdClick.MouseButton1Click:Connect(function()
-            sdToggle(); autoSidedashEnabled = sdGet()
+            sdToggle()
+            autoSidedashEnabled = sdGet()
         end)
 
-        -- Dash circle floating button
         local dashCircleEnabled = true
         local dashCircleGui     = nil
 
         local function buildDashCircle()
             if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end
+            local pg = LocalPlayer:WaitForChild("PlayerGui")
             local sg = Instance.new("ScreenGui")
             sg.Name           = "DashCircleGui"
             sg.ResetOnSpawn   = false
-            sg.IgnoreGuiInset = true
             sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
             sg.Parent         = pg
+            dashCircleGui = sg
 
             local circle = Instance.new("TextButton")
-            circle.Size             = UDim2.new(0, 80, 0, 80)
-            circle.Position         = UDim2.new(0, 18, 0.5, -20)
-            circle.BackgroundColor3 = Color3.fromRGB(25, 40, 30)
+            circle.Size             = UDim2.new(0, 64, 0, 64)
+            circle.Position         = UDim2.new(0, 16, 0.5, 48)
+            circle.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
             circle.Font             = Enum.Font.GothamBold
             circle.Text             = "DASH"
-            circle.TextColor3       = Color3.fromRGB(100, 200, 130)
-            circle.TextSize         = 14
+            circle.TextColor3       = Color3.fromRGB(200, 220, 255)
+            circle.TextSize         = 13
             circle.AutoButtonColor  = false
             circle.BorderSizePixel  = 0
             circle.Active           = true
             circle.Draggable        = true
-            circle.ZIndex           = 30
+            circle.ZIndex           = 10
             circle.Parent           = sg
             Instance.new("UICorner", circle).CornerRadius = UDim.new(0.5, 0)
-            local dSt = Instance.new("UIStroke"); dSt.Color = Color3.fromRGB(55,200,100); dSt.Thickness = 2.5; dSt.Parent = circle
+            local dStroke = Instance.new("UIStroke")
+            dStroke.Color     = Color3.fromRGB(60, 210, 110)
+            dStroke.Thickness = 2
+            dStroke.Parent    = circle
 
             circle.MouseButton1Click:Connect(function()
                 if not State.Locked or not State.Target then return end
@@ -4633,55 +4901,68 @@ local function buildGui()
             RunService.Heartbeat:Connect(function()
                 if not dashCircleGui then return end
                 if State.Locked and State.Target and isInRange(State.Target, COMBO.Range) then
-                    circle.BackgroundColor3 = Color3.fromRGB(18, 55, 28)
-                    dSt.Color               = Color3.fromRGB(55, 200, 100)
-                    circle.TextColor3       = Color3.fromRGB(55, 210, 110)
+                    circle.BackgroundColor3 = Color3.fromRGB(20, 60, 30)
+                    dStroke.Color           = Color3.fromRGB(60, 210, 110)
+                    circle.TextColor3       = Color3.fromRGB(60, 210, 110)
                 else
-                    circle.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                    dSt.Color               = Color3.fromRGB(70, 70, 85)
-                    circle.TextColor3       = Color3.fromRGB(100, 100, 120)
+                    circle.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+                    dStroke.Color           = Color3.fromRGB(80, 80, 90)
+                    circle.TextColor3       = Color3.fromRGB(130, 130, 150)
                 end
             end)
-            dashCircleGui = sg
         end
 
         local dcRow, dcClick, dcToggle, dcGet =
-            makeToggleRow(s, "DASH CIRCLE BUTTON  —  floating on-screen button", true, 13)
+            makeToggleRow(s, "DASH CIRCLE BUTTON", true, 12)
+        makeInfoBtn(dcRow, 140,
+            "DASH CIRCLE BUTTON",
+            "Shows a draggable circular DASH button below the LOCK circle. Tap it to trigger a sidedash toward your locked target instead of using a keyboard key.")
+
         if dashCircleEnabled then buildDashCircle() end
+
         dcClick.MouseButton1Click:Connect(function()
             dcToggle()
             dashCircleEnabled = dcGet()
-            if dashCircleEnabled then buildDashCircle()
-            else if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end end
+            if dashCircleEnabled then
+                buildDashCircle()
+            else
+                if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end
+            end
         end)
 
-        local driRow, driClick, driToggle, driGet =
-            makeToggleRow(s, "DASH RANGE INDICATOR  —  top banner shows DASH / DON'T", true, 14)
+        local driRow, driClick, driToggle, driGet = makeToggleRow(s, "DASH RANGE INDICATOR", true, 13)
+        makeInfoBtn(driRow, 148,
+            "DASH RANGE INDICATOR",
+            "Shows a floating widget at the top saying either DASH or DON'T DASH — indicating when you're in range to sidedash toward your target.")
+
         driClick.MouseButton1Click:Connect(function()
             driToggle()
             dashRangeIndicatorEnabled = driGet()
+            if floatingDashWidget then
+                floatingDashWidget.Enabled = dashRangeIndicatorEnabled
+            end
         end)
 
-        local sirRow, sirClick, sirToggle, sirGet =
-            makeToggleRow(s, "SIDEDASH IN RANGE", true, 15)
+        local sirRow, sirClick, sirToggle, sirGet = makeToggleRow(s, "SIDEDASH IN RANGE", true, 14)
         sirClick.MouseButton1Click:Connect(function() sirToggle(); autoSidedashWhenInRangeEnabled = sirGet() end)
 
-        -- Click control
-        makeSectionLabel(s, "CLICK CONTROL", 16)
-        local bm1Row, bm1Click, bm1Toggle, bm1Get =
-            makeToggleRow(s, "BLOCK M1 WHEN OPPONENT IS BLOCKING", true, 17)
-        bm1Click.MouseButton1Click:Connect(function()
-            bm1Toggle(); blockM1Enabled = bm1Get()
-        end)
+        makeSectionLabel(s, "CLICK CONTROL", 15)
 
-        -- Armed chip (combo)
-        local combo3ArmedLabel = makeStatusChip(s, "", Color3.fromRGB(255,200,0), 18)
+        local bm1Row, bm1Click, bm1Toggle, bm1Get = makeToggleRow(s, "BLOCK M1 WHEN OPP. BLOCKING", true, 16)
+        bm1Click.MouseButton1Click:Connect(function() bm1Toggle(); blockM1Enabled = bm1Get() end)
+        makeInfoBtn(bm1Row, 130, "BLOCK M1", "Blocks your own M1 when opponent is blocking or you're out of range.")
+
+        local combo3ArmedLabel = makeStatusChip(s, "", Color3.fromRGB(255, 200, 0), 17)
         combo3ArmedLabel.BackgroundTransparency = 1
 
-        local armedBlinkConn = nil
+        local armedBlinkConn  = nil
+        local armedBlinkState = false
+
         function GUI_API.SetCombo3Armed(isArmed)
             if armedBlinkConn then armedBlinkConn:Disconnect(); armedBlinkConn = nil end
             if isArmed then
+                armedBlinkState = true
+                combo3ArmedLabel.Text = "⚡ ARMED — waiting for range"
                 armedBlinkConn = RunService.Heartbeat:Connect(function()
                     if not comboArmedPersistent then
                         if armedBlinkConn then armedBlinkConn:Disconnect(); armedBlinkConn = nil end
@@ -4689,68 +4970,64 @@ local function buildGui()
                         return
                     end
                     local remaining = math.max(0, COMBO_PERSISTENT_TIMEOUT - (tick() - comboArmedPersistentTime))
-                    combo3ArmedLabel.Text = "⚡ ARMED  " .. string.format("%.1f", remaining) .. "s"
-                    combo3ArmedLabel.TextColor3 = remaining <= 3 and Color3.fromRGB(255,80,80) or Color3.fromRGB(255,200,0)
+                    armedBlinkState = not armedBlinkState
+                    combo3ArmedLabel.Text = (armedBlinkState and "⚡ " or "   ") .. "ARMED  " .. string.format("%.1f", remaining) .. "s"
+                    combo3ArmedLabel.TextColor3 = remaining <= 3 and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(255, 200, 0)
                 end)
             else
                 combo3ArmedLabel.Text = ""
             end
         end
 
-        -- Status update
         function GUI_API.SetStatus(isLocked, targetName)
             if isLocked then
-                statusBadge.Text       = "◈  " .. (targetName or "?")
-                statusBadge.TextColor3 = Color3.fromRGB(55, 200, 100)
-                lockBtn.Text           = "Unlock Target"
-                lockBtn.BackgroundColor3 = Color3.fromRGB(110, 18, 18)
+                statusTitleLbl.Text       = "◈  Locked: " .. (targetName or "?")
+                statusTitleLbl.TextColor3 = Color3.fromRGB(60, 200, 100)
+                lockBtn.Text              = "Unlock"
+                lockBtn.BackgroundColor3  = Color3.fromRGB(120, 20, 20)
+                lbStroke.Color            = Color3.fromRGB(160, 30, 30)
             else
-                statusBadge.Text       = "◈  No target"
-                statusBadge.TextColor3 = Color3.fromRGB(140, 50, 50)
-                lockBtn.Text           = "Toggle Lock-On"
-                lockBtn.BackgroundColor3 = Color3.fromRGB(22, 60, 120)
+                statusTitleLbl.Text       = "◈  No target locked"
+                statusTitleLbl.TextColor3 = Color3.fromRGB(140, 50, 50)
+                lockBtn.Text              = "Toggle Lock-On"
+                lockBtn.BackgroundColor3  = Color3.fromRGB(25, 70, 130)
+                lbStroke.Color            = Color3.fromRGB(40, 100, 180)
             end
         end
 
         function GUI_API.SetKeyLabel(k) end
         function GUI_API.SetComboKeyLabel(k) end
         function GUI_API.SetCombo3KeyLabel(k) end
-        function GUI_API.SetAntiTeamClearKeyLabel(k) end
     end
 
-    -- ═══════════════════════════════════════════════════
-    -- YUJI TAB
-    -- ═══════════════════════════════════════════════════
     do
-        local s = tabFrames["YUJI"].scroll
+        local s = yujiScroll
 
         makeSectionLabel(s, "BLACK FLASH CHAIN", 1)
-        local bfcRow, bfcClick, bfcToggle, bfcGet =
-            makeToggleRow(s, "AUTO BLACKFLASH CHAIN", false, 2)
+
+        local bfcRow, bfcClick, bfcToggle, bfcGet = makeToggleRow(s, "AUTO BLACKFLASH CHAIN", false, 2)
         bfcClick.MouseButton1Click:Connect(function() bfcToggle(); bfChainEnabled = bfcGet() end)
 
         makeSectionLabel(s, "MANJI KICK", 3)
-        local mkRow, mkClick, mkToggle, mkGet =
-            makeToggleRow(s, "MANJI KICK  —  counters unblockable moves", false, 4)
+
+        local mkRow, mkClick, mkToggle, mkGet = makeToggleRow(s, "MANJI KICK", false, 4)
         mkClick.MouseButton1Click:Connect(function() mkToggle(); enabled = mkGet() end)
+        makeInfoBtn(mkRow, 100, "MANJI KICK", "Counters completely unblockable moves. Does NOT counter moves that can normally be blocked.")
 
         makeSectionLabel(s, "AUTO BLACK FLASH", 5)
-        local afRow, afClick, afToggle, afGet =
-            makeToggleRow(s, "AUTO BLACK FLASH", false, 6)
+
+        local afRow, afClick, afToggle, afGet = makeToggleRow(s, "AUTO BLACK FLASH", false, 6)
         afClick.MouseButton1Click:Connect(function() afToggle(); autoBlackFlashEnabled = afGet() end)
 
         function GUI_API.SetCombo2KeyLabel(k) end
     end
 
-    -- ═══════════════════════════════════════════════════
-    -- FLIGHT TAB
-    -- ═══════════════════════════════════════════════════
     do
-        local s = tabFrames["FLIGHT"].scroll
+        local s = flightScroll
 
         makeSectionLabel(s, "VILTRUMITE FLIGHT", 1)
-        local flRow, flClick, flToggle, flGet =
-            makeToggleRow(s, "FLIGHT MODE", false, 2)
+
+        local flRow, flClick, flToggle, flGet = makeToggleRow(s, "FLIGHT MODE", false, 2)
         flClick.MouseButton1Click:Connect(function()
             flToggle()
             Settings.FlightEnabled = flGet()
@@ -4762,7 +5039,7 @@ local function buildGui()
                 stopSuppressingAnimations()
                 if humanoid then
                     humanoid.PlatformStand = false
-                    humanoid.CameraOffset  = Vector3.new(0,0,0)
+                    humanoid.CameraOffset  = Vector3.new(0, 0, 0)
                     if savedAutoRotate ~= nil then
                         humanoid.AutoRotate = savedAutoRotate
                         savedAutoRotate = nil
@@ -4780,11 +5057,11 @@ local function buildGui()
             Settings.BaseSpeed = num
         end, 3)
 
-        local flightStatusLbl = makeStatusChip(s, "✈  Flight: Grounded", Color3.fromRGB(100,100,120), 4)
+        local flightStatusLbl = makeStatusChip(s, "✈  Flight: Grounded", Color3.fromRGB(100, 100, 120), 4)
 
         makeSectionLabel(s, "GROUND SPRINT", 5)
-        local spRow, spClick, spToggle, spGet =
-            makeToggleRow(s, "SPRINT MODE", false, 6)
+
+        local spRow, spClick, spToggle, spGet = makeToggleRow(s, "SPRINT MODE", false, 6)
         spClick.MouseButton1Click:Connect(function()
             spToggle()
             SprintSettings.Enabled = spGet()
@@ -4795,28 +5072,35 @@ local function buildGui()
             SprintSettings.GroundSpeed = num
         end, 7)
 
-        local sprintStatusLbl = makeStatusChip(s, "🏃  Sprint: Normal Speed", Color3.fromRGB(100,100,120), 8)
+        local sprintStatusLbl = makeStatusChip(s, "🏃  Sprint: Normal Speed", Color3.fromRGB(100, 100, 120), 8)
 
         function GUI_API.SetFlightKeyLabel(k) end
         function GUI_API.SetSprintKeyLabel(k) end
 
         RunService.Heartbeat:Connect(function()
-            flightStatusLbl.Text       = isFlying        and "✈  Flight: Active"       or "✈  Flight: Grounded"
-            flightStatusLbl.TextColor3 = isFlying        and ON_GREEN                   or Color3.fromRGB(100,100,120)
-            sprintStatusLbl.Text       = isGroundSprinting and "🏃  Sprint: Active"    or "🏃  Sprint: Normal Speed"
-            sprintStatusLbl.TextColor3 = isGroundSprinting and ON_GREEN                or Color3.fromRGB(100,100,120)
+            if isFlying then
+                flightStatusLbl.Text       = "✈  Flight: Active"
+                flightStatusLbl.TextColor3 = Color3.fromRGB(60, 200, 100)
+            else
+                flightStatusLbl.Text       = "✈  Flight: Grounded"
+                flightStatusLbl.TextColor3 = Color3.fromRGB(100, 100, 120)
+            end
+            if isGroundSprinting then
+                sprintStatusLbl.Text       = "🏃  Sprint: Active"
+                sprintStatusLbl.TextColor3 = Color3.fromRGB(60, 200, 100)
+            else
+                sprintStatusLbl.Text       = "🏃  Sprint: Normal Speed"
+                sprintStatusLbl.TextColor3 = Color3.fromRGB(100, 100, 120)
+            end
         end)
     end
 
-    -- ═══════════════════════════════════════════════════
-    -- CDs TAB
-    -- ═══════════════════════════════════════════════════
     do
-        local s = tabFrames["CDs"].scroll
+        local s = cdScroll
 
         makeSectionLabel(s, "COOLDOWN TRACKER", 1)
-        local cdRow, cdClick, cdToggle, cdGet =
-            makeToggleRow(s, "SHOW ALL COOLDOWNS", true, 2)
+
+        local cdRow, cdClick, cdToggle, cdGet = makeToggleRow(s, "SHOW ALL COOLDOWNS", true, 2)
         cdClick.MouseButton1Click:Connect(function()
             cdToggle()
             CDTRACK.ENABLED = cdGet()
@@ -4829,7 +5113,6 @@ local function buildGui()
         end)
     end
 
-    -- ── Patch blockM1 override ────────────────────────────
     local _origUpdateLeftClickBlock = updateLeftClickBlock
     updateLeftClickBlock = function()
         if not blockM1Enabled then
@@ -4841,14 +5124,34 @@ local function buildGui()
         end
         _origUpdateLeftClickBlock()
     end
+
+    local minimized = false
+    minimizeBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        minimizeBtn.Text = minimized and "+" or "−"
+        body.Visible     = not minimized
+        local fromH  = minimized and TOTAL_H or 38
+        local toH    = minimized and 38 or TOTAL_H
+        local dur    = 0.22
+        local startT = tick()
+        container.ClipsDescendants = true
+        while true do
+            local alpha = math.clamp((tick() - startT) / dur, 0, 1)
+            local ease  = 1 - (1 - alpha)^3
+            container.Size = UDim2.new(0, TOTAL_W, 0, math.floor(fromH + (toH - fromH) * ease))
+            if alpha >= 1 then break end
+            RunService.Heartbeat:Wait()
+        end
+        container.Size             = UDim2.new(0, TOTAL_W, 0, toH)
+        container.ClipsDescendants = minimized
+    end)
+
+    container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
 end
 
--- =========================================================
--- BOOT
--- =========================================================
 buildDashWidget()
 playOpeningAnimation(function()
     buildGui()
 end)
 
-print("[SCRIPTIFY HUB] Mobile GUI loaded ✓")
+print("[SCRIPTIFY HUB] Loaded — Invisibility, Dash Range Indicator fix, Flight & Sprint included")
