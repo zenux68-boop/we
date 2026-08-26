@@ -33,7 +33,7 @@ local function tapBtn(btn)
     local absPos = btn.AbsolutePosition
     local absSize = btn.AbsoluteSize
     local x = absPos.X + absSize.X / 2
-    local y = absPos.Y + absSize.Y / 2
+    local y = absPos.Y + absSize.Y / 2 + absSize.Y * 0.6
     local id = math.random(1000, 9999)
     pcall(function()
         VIM:SendTouchEvent(id, 0, x, y)
