@@ -4036,7 +4036,7 @@ titleBar.Size             = UDim2.new(1, 0, 0, 28)
 
 local statusTitleLbl = Instance.new("TextLabel")
 statusTitleLbl.Size               = UDim2.new(0, 120, 1, 0)
-statusTitleLbl.Position           = UDim2.new(0, 80, 0, 0)
+statusTitleLbl.Position           = UDim2.new(0, 115, 0, 0)
 statusTitleLbl.BackgroundTransparency = 1
 statusTitleLbl.Font               = Enum.Font.Gotham
 statusTitleLbl.Text               = "◈ No target"
@@ -5136,19 +5136,39 @@ end
 miniDragDetector.Enabled = false
 miniDragDetector.Parent = container
 
--- tap vs drag: track time on drag start
 local miniDragStartTime = 0
+
+local function setMinimized(val)
+    minimized = val
+    if minimized then
+        body.Visible               = false
+        titleBar.Visible           = false
+        container.Size             = UDim2.new(0, 50, 0, 50)
+        container.BackgroundColor3 = ACCENT
+        miniLabel.Visible          = true
+        miniDragDetector.Enabled   = true
+        dragDetector.Enabled       = false
+        local tName = State.Target and State.Target.Name or "HUB"
+        miniLabel.Text = tName
+    else
+        body.Visible               = true
+        titleBar.Visible           = true
+        container.Size             = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+        container.BackgroundColor3 = BG_MAIN
+        miniLabel.Visible          = false
+        miniDragDetector.Enabled   = false
+        dragDetector.Enabled       = true
+    end
+end
+
 miniDragDetector.DragStart:Connect(function()
     miniDragStartTime = tick()
 end)
 miniDragDetector.DragEnd:Connect(function()
-    -- under 200ms with no real movement = tap = restore
     if tick() - miniDragStartTime < 0.2 then
         setMinimized(false)
     end
 end)
-
-local function setMinimized(val)
     minimized = val
     if minimized then
         body.Visible               = false
