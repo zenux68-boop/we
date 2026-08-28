@@ -3984,9 +3984,40 @@ local CONTENT_W = TOTAL_W - TAB_W
     container.BackgroundColor3       = BG_MAIN
     container.BorderSizePixel        = 0
     container.Active                 = true
-    container.Draggable              = true
     container.ClipsDescendants       = false
     container.Parent                 = screenGui
+
+    do
+        local dragging, dragInput, mousePos, framePos
+        container.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                mousePos = input.Position
+                framePos = container.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+        container.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - mousePos
+                container.Position = UDim2.new(
+                    framePos.X.Scale, framePos.X.Offset + delta.X,
+                    framePos.Y.Scale, framePos.Y.Offset + delta.Y
+                )
+            end
+        end)
+    end
     Instance.new("UICorner", container).CornerRadius = UDim.new(0, 12)
     local rootStroke = Instance.new("UIStroke")
     rootStroke.Color        = ACCENT
@@ -4036,7 +4067,7 @@ titleBar.Size             = UDim2.new(1, 0, 0, 28)
 
 local statusTitleLbl = Instance.new("TextLabel")
 statusTitleLbl.Size               = UDim2.new(0, 120, 1, 0)
-statusTitleLbl.Position           = UDim2.new(0, 173, 0, 0)
+statusTitleLbl.Position           = UDim2.new(0, 80, 0, 0)
 statusTitleLbl.BackgroundTransparency = 1
 statusTitleLbl.Font               = Enum.Font.Gotham
 statusTitleLbl.Text               = "◈ No target"
@@ -5090,53 +5121,35 @@ makeInfoBtn(bfcRow, 118, "AUTO BLACKFLASH CHAIN", "Only works with lock on enabl
         _origUpdateLeftClickBlock()
     end
 
-local minimized = false
-
--- Drag handle: titleBar drags the whole container (non-minimized)
-local dragDetector = Instance.new("UIDragDetector")
-dragDetector.DragStyle = Enum.UIDragDetectorDragStyle.TranslateXY
-dragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.CustomFunction
-dragDetector.CustomFunction = function(detector, inputPosition, delta)
-    container.Position = UDim2.new(
-        container.Position.X.Scale,
-        container.Position.X.Offset + delta.X,
-        container.Position.Y.Scale,
-        container.Position.Y.Offset + delta.Y
-    )
-    return delta
-end
-dragDetector.Parent = titleBar
+ local minimized = false
 
 local miniLabel = Instance.new("TextLabel")
-miniLabel.Size               = UDim2.new(1, 0, 1, 0)
+miniLabel.Size               = UDim2.new(1, -4, 1, -4)
+miniLabel.Position           = UDim2.new(0, 2, 0, 2)
 miniLabel.BackgroundTransparency = 1
 miniLabel.Font               = Enum.Font.GothamBold
-miniLabel.Text               = "HUB"
+miniLabel.Text               = "S"
 miniLabel.TextColor3         = Color3.fromRGB(255, 255, 255)
-miniLabel.TextSize           = 11
+miniLabel.TextSize           = 9
+miniLabel.TextWrapped        = true
+miniLabel.TextScaled         = false
 miniLabel.TextXAlignment     = Enum.TextXAlignment.Center
 miniLabel.TextYAlignment     = Enum.TextYAlignment.Center
 miniLabel.ZIndex             = 12
 miniLabel.Visible            = false
 miniLabel.Parent             = container
 
--- Minimized drag: UIDragDetector on container itself when minimized
-local miniDragDetector = Instance.new("UIDragDetector")
-miniDragDetector.DragStyle = Enum.UIDragDetectorDragStyle.TranslateXY
-miniDragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.CustomFunction
-miniDragDetector.CustomFunction = function(detector, inputPosition, delta)
-    container.Position = UDim2.new(
-        container.Position.X.Scale,
-        container.Position.X.Offset + delta.X,
-        container.Position.Y.Scale,
-        container.Position.Y.Offset + delta.Y
-    )
-    return delta
-end
-miniDragDetector.Enabled = false
-miniDragDetector.Parent = container
-
-local miniDragStartTime = 0
+-- Separate full-container restore button, always on top
+local restoreBtn = Instance.new("TextButton")
+restoreBtn.Name             = "RestoreBtn"
+restoreBtn.Size             = UDim2.new(1, 0, 1, 0)
+restoreBtn.Position         = UDim2.new(0, 0, 0, 0)
+restoreBtn.BackgroundTransparency = 1
+restoreBtn.Text             = ""
+restoreBtn.BorderSizePixel  = 0
+restoreBtn.ZIndex           = 15
+restoreBtn.Visible          = false
+restoreBtn.Parent           = container
 
 local function setMinimized(val)
     minimized = val
@@ -5145,9 +5158,8 @@ local function setMinimized(val)
         titleBar.Visible           = false
         container.Size             = UDim2.new(0, 50, 0, 50)
         container.BackgroundColor3 = ACCENT
+        restoreBtn.Visible         = true
         miniLabel.Visible          = true
-        miniDragDetector.Enabled   = true
-        dragDetector.Enabled       = false
         local tName = State.Target and State.Target.Name or "HUB"
         miniLabel.Text = tName
     else
@@ -5155,28 +5167,14 @@ local function setMinimized(val)
         titleBar.Visible           = true
         container.Size             = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
         container.BackgroundColor3 = BG_MAIN
+        restoreBtn.Visible         = false
         miniLabel.Visible          = false
-        miniDragDetector.Enabled   = false
-        dragDetector.Enabled       = true
     end
 end
-
-miniDragDetector.DragStart:Connect(function()
-    miniDragStartTime = tick()
-end)
-miniDragDetector.DragEnd:Connect(function()
-    if tick() - miniDragStartTime < 0.2 then
-        setMinimized(false)
-    end
-end)
 
 minimizeBtn.Activated:Connect(function()
     setMinimized(true)
 end)
-
-local dragStartPos = nil
-local dragStartContainerPos = nil
-local dragMoved = false
 
 UserInputService.InputBegan:Connect(function(input, processed)
     if not minimized then return end
@@ -5187,46 +5185,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
     local sz  = container.AbsoluteSize
     if pos.X >= abs.X and pos.X <= abs.X + sz.X
     and pos.Y >= abs.Y and pos.Y <= abs.Y + sz.Y then
-        dragStartPos = Vector2.new(pos.X, pos.Y)
-        dragStartContainerPos = container.Position
-        dragMoved = false
+        setMinimized(false)
     end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if not minimized then return end
-    if not dragStartPos then return end
-    if input.UserInputType ~= Enum.UserInputType.Touch
-        and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-    local pos = input.Position
-    local delta = Vector2.new(pos.X - dragStartPos.X, pos.Y - dragStartPos.Y)
-    if delta.Magnitude > 6 then
-        dragMoved = true
-        container.Position = UDim2.new(
-            dragStartContainerPos.X.Scale,
-            dragStartContainerPos.X.Offset + delta.X,
-            dragStartContainerPos.Y.Scale,
-            dragStartContainerPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if not minimized then return end
-    if input.UserInputType ~= Enum.UserInputType.Touch
-        and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-    if dragStartPos and not dragMoved then
-        local pos = input.Position
-        local abs = container.AbsolutePosition
-        local sz  = container.AbsoluteSize
-        if pos.X >= abs.X and pos.X <= abs.X + sz.X
-        and pos.Y >= abs.Y and pos.Y <= abs.Y + sz.Y then
-            setMinimized(false)
-        end
-    end
-    dragStartPos = nil
-    dragStartContainerPos = nil
-    dragMoved = false
 end)
 end
 
