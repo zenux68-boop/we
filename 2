@@ -2468,10 +2468,7 @@ local function hookHandicapRemote(remote)
                 local tgt = getLockedTarget()
                 if not tgt then return end
 
-                fireDivergentFist()
-
                 task.delay(CHAIN_INTERVAL, function()
-                    fireDivergentFist()
                     task.delay(0.29, function()
                         State.AnglePredActive  = false
                         State.AnglePredEndTime = 0
@@ -3219,7 +3216,6 @@ local function fireComboChain()
             end)
         end
 
-        fireDivergentFist()
         tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
@@ -3282,7 +3278,6 @@ local function fireComboChain()
     task.spawn(function()
         task.wait(0.20)
         task.delay(CHAIN_INTERVAL, function()
-            fireDivergentFist()
             task.delay(0.29, function()
                 State.AnglePredActive  = false
                 State.AnglePredEndTime = 0
@@ -3339,8 +3334,7 @@ local function setupAnimationWatcher(character)
     end)
 end
 
-if LocalPlayer.Character then setupAnimationWatcher(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(setupAnimationWatcher)
+
 
 RunService.Heartbeat:Connect(function()
     if not State.Locked or not State.Target then
@@ -3838,17 +3832,9 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local selfName   = tostring(self.Name)
         local parentName = self.Parent and self.Parent.Parent and tostring(self.Parent.Parent.Name) or ""
         if selfName == "Activated" and parentName == "DivergentFistService" then
-            if bfChainEnabled
-                and not comboInProgress2
-                and State.Locked
-                and State.Target
-                and isInRange(State.Target, COMBO.Range)
-            then
-                comboManualArmed2 = true
-                local c = LocalPlayer.Character
-                local h = c and c:FindFirstChildOfClass("Humanoid")
-                if h then h.AutoRotate = false end
-            end
+            task.delay(0.27, function()
+                fireDivergentFist()
+            end)
         end
     end
     return oldNamecall(self, ...)
