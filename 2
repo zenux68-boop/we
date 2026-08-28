@@ -5141,11 +5141,12 @@ local function setMinimized(val)
     end
 end
 
-minimizeBtn.MouseButton1Click:Connect(function()
+minimizeBtn.Activated:Connect(function()
     setMinimized(true)
 end)
 
-restoreBtn.MouseButton1Click:Connect(function()
+restoreBtn.BackgroundTransparency = 0.99  -- forces touch hitbox to register
+restoreBtn.Activated:Connect(function()
     setMinimized(false)
 end)
 end
