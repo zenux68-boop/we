@@ -5145,9 +5145,17 @@ minimizeBtn.Activated:Connect(function()
     setMinimized(true)
 end)
 
-restoreBtn.BackgroundTransparency = 0.99  -- forces touch hitbox to register
-restoreBtn.Activated:Connect(function()
-    setMinimized(false)
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not minimized then return end
+    if input.UserInputType ~= Enum.UserInputType.Touch
+        and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+    local pos = input.Position
+    local abs = container.AbsolutePosition
+    local sz  = container.AbsoluteSize
+    if pos.X >= abs.X and pos.X <= abs.X + sz.X
+    and pos.Y >= abs.Y and pos.Y <= abs.Y + sz.Y then
+        setMinimized(false)
+    end
 end)
 end
 
