@@ -2468,7 +2468,10 @@ local function hookHandicapRemote(remote)
                 local tgt = getLockedTarget()
                 if not tgt then return end
 
+                fireDivergentFist()
+
                 task.delay(CHAIN_INTERVAL, function()
+                    fireDivergentFist()
                     task.delay(0.29, function()
                         State.AnglePredActive  = false
                         State.AnglePredEndTime = 0
@@ -3216,6 +3219,7 @@ local function fireComboChain()
             end)
         end
 
+        
         tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
@@ -3275,23 +3279,7 @@ local function fireComboChain()
         end)
     end)
 
-    task.spawn(function()
-        task.wait(0.20)
-        task.delay(CHAIN_INTERVAL, function()
-            task.delay(0.29, function()
-                State.AnglePredActive  = false
-                State.AnglePredEndTime = 0
-                comboInProgress2       = false
-                comboManualArmed2      = false
-                releaseTempCharLock()
-                task.delay(0.1, function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChildOfClass("Humanoid")
-                    if h then h.AutoRotate = true end
-                end)
-            end)
-        end)
-    end)
+    
 
     task.delay(2, function()
         State.AnglePredActive  = false
@@ -3305,35 +3293,6 @@ local function fireComboChain()
         if h then h.AutoRotate = true end
     end)
 end
-local AnimationTriggers = {
-    ["rbxassetid://100962226150441"] = 0.19,
-    ["rbxassetid://95852624447551"]  = 0.19,
-    ["rbxassetid://74145636023952"]  = 0.19,
-    ["rbxassetid://72475960800126"]  = 0.20,
-}
-
-local StraightAnimations = {
-    ["rbxassetid://123171106092050"] = true,
-}
-
-local function setupAnimationWatcher(character)
-    local humanoid = character:WaitForChild("Humanoid", 5)
-    local animator = humanoid and humanoid:WaitForChild("Animator", 5)
-    if not animator then return end
-    animator.AnimationPlayed:Connect(function(track)
-        local animId = track.Animation.AnimationId
-        local delayTime = AnimationTriggers[animId]
-        if not delayTime and StraightAnimations[animId] then delayTime = 0.19 end
-        if delayTime then
-            task.delay(delayTime, function()
-                if humanoid.Health > 0 then
-                    fireDivergentFist()
-                end
-            end)
-        end
-    end)
-end
-
 
 
 RunService.Heartbeat:Connect(function()
@@ -3832,9 +3791,20 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
         local selfName   = tostring(self.Name)
         local parentName = self.Parent and self.Parent.Parent and tostring(self.Parent.Parent.Name) or ""
         if selfName == "Activated" and parentName == "DivergentFistService" then
-            task.delay(0.27, function()
-                fireDivergentFist()
-            end)
+            if bfChainEnabled
+                and not comboInProgress2
+                and State.Locked
+                and State.Target
+                and isInRange(State.Target, COMBO.Range)
+            then
+                comboManualArmed2 = true
+                local c = LocalPlayer.Character
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if h then h.AutoRotate = false end
+                task.delay(0.27, function()
+                    fireDivergentFist()
+                end)
+            end
         end
     end
     return oldNamecall(self, ...)
