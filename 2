@@ -4034,17 +4034,18 @@ titleBar.Size             = UDim2.new(1, 0, 0, 28)
     titleLbl.ZIndex             = 6
     titleLbl.Parent             = titleBar
 
-    local statusTitleLbl = Instance.new("TextLabel")
-    statusTitleLbl.Size               = UDim2.new(0, 260, 1, 0)
-    statusTitleLbl.Position           = UDim2.new(0, 160, 0, 0)
-    statusTitleLbl.BackgroundTransparency = 1
-    statusTitleLbl.Font               = Enum.Font.Gotham
-    statusTitleLbl.Text               = "◈  No target locked"
-    statusTitleLbl.TextColor3         = Color3.fromRGB(140, 50, 50)
-    statusTitleLbl.TextSize           = 11
-    statusTitleLbl.TextXAlignment     = Enum.TextXAlignment.Center
-    statusTitleLbl.ZIndex             = 6
-    statusTitleLbl.Parent             = titleBar
+local statusTitleLbl = Instance.new("TextLabel")
+statusTitleLbl.Size               = UDim2.new(0, 120, 1, 0)
+statusTitleLbl.Position           = UDim2.new(0, 80, 0, 0)
+statusTitleLbl.BackgroundTransparency = 1
+statusTitleLbl.Font               = Enum.Font.Gotham
+statusTitleLbl.Text               = "◈ No target"
+statusTitleLbl.TextColor3         = Color3.fromRGB(140, 50, 50)
+statusTitleLbl.TextSize           = 8
+statusTitleLbl.TextWrapped        = true
+statusTitleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+statusTitleLbl.ZIndex             = 6
+statusTitleLbl.Parent             = titleBar
 
     local minimizeBtn = Instance.new("TextButton")
     minimizeBtn.Size             = UDim2.new(0, 26, 0, 26)
@@ -4661,7 +4662,7 @@ sg.Parent         = pg
 
       local lcRow, lcClick, lcToggle, lcGet, _, lcSetOn =
     makeToggleRow(s, "LOCK CIRCLE BUTTON", true, 4)
-makeInfoBtn(lcRow, 140,
+makeInfoBtn(lcRow, 90,
     "LOCK CIRCLE BUTTON",
     "Shows a draggable circular LOCK button on the left side of your screen. Click it to toggle lock-on without needing a keyboard key.")
 
@@ -4712,7 +4713,7 @@ end, 4)
 
         local slInfoBtn = Instance.new("TextButton")
         slInfoBtn.Size             = UDim2.new(0, 80, 0, 22)
-        slInfoBtn.Position         = UDim2.new(0, 112, 0.5, -11)
+        slInfoBtn.Position         = UDim2.new(0, 70, 0.5, -11)
         slInfoBtn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
         slInfoBtn.Font             = Enum.Font.Gotham
         slInfoBtn.Text             = "ℹ  what is this?"
@@ -4868,7 +4869,7 @@ sg.Parent         = pg
 
        local dcRow, dcClick, dcToggle, dcGet =
     makeToggleRow(s, "DASH CIRCLE BUTTON", true, 12)
-makeInfoBtn(dcRow, 140,
+makeInfoBtn(dcRow, 90,
     "DASH CIRCLE BUTTON",
     "Shows a draggable circular DASH button below the LOCK circle. Tap it to trigger a sidedash toward your locked target instead of using a keyboard key.")
 
@@ -4894,8 +4895,8 @@ end, 12)
         end)
 
         local driRow, driClick, driToggle, driGet = makeToggleRow(s, "DASH RANGE INDICATOR", true, 13)
-        makeInfoBtn(driRow, 148,
-            "DASH RANGE INDICATOR",
+       makeInfoBtn(driRow, 90,
+    "DASH RANGE INDICATOR",
             "Shows a floating widget at the top saying either DASH or DON'T DASH — indicating when you're in range to sidedash toward your target.")
 
         driClick.MouseButton1Click:Connect(function()
@@ -4943,20 +4944,20 @@ end, 12)
         end
 
         function GUI_API.SetStatus(isLocked, targetName)
-            if isLocked then
-                statusTitleLbl.Text       = "◈  Locked: " .. (targetName or "?")
-                statusTitleLbl.TextColor3 = Color3.fromRGB(60, 200, 100)
-                lockBtn.Text              = "Unlock"
-                lockBtn.BackgroundColor3  = Color3.fromRGB(120, 20, 20)
-                lbStroke.Color            = Color3.fromRGB(160, 30, 30)
-            else
-                statusTitleLbl.Text       = "◈  No target locked"
-                statusTitleLbl.TextColor3 = Color3.fromRGB(140, 50, 50)
-                lockBtn.Text              = "Toggle Lock-On"
-                lockBtn.BackgroundColor3  = Color3.fromRGB(25, 70, 130)
-                lbStroke.Color            = Color3.fromRGB(40, 100, 180)
-            end
-        end
+    if isLocked then
+        statusTitleLbl.Text       = "◈ " .. (targetName or "?")
+        statusTitleLbl.TextColor3 = Color3.fromRGB(60, 200, 100)
+        lockBtn.Text              = "Unlock"
+        lockBtn.BackgroundColor3  = Color3.fromRGB(120, 20, 20)
+        lbStroke.Color            = Color3.fromRGB(160, 30, 30)
+    else
+        statusTitleLbl.Text       = "◈ No target"
+        statusTitleLbl.TextColor3 = Color3.fromRGB(140, 50, 50)
+        lockBtn.Text              = "Toggle Lock-On"
+        lockBtn.BackgroundColor3  = Color3.fromRGB(25, 70, 130)
+        lbStroke.Color            = Color3.fromRGB(40, 100, 180)
+    end
+end
 
         function GUI_API.SetKeyLabel(k) end
         function GUI_API.SetComboKeyLabel(k) end
@@ -5089,28 +5090,48 @@ makeInfoBtn(bfcRow, 118, "AUTO BLACKFLASH CHAIN", "Only works with lock on enabl
         _origUpdateLeftClickBlock()
     end
 
-   local minimized = false
+ local minimized = false
+
+local miniLabel = Instance.new("TextLabel")
+miniLabel.Size               = UDim2.new(1, -4, 1, -4)
+miniLabel.Position           = UDim2.new(0, 2, 0, 2)
+miniLabel.BackgroundTransparency = 1
+miniLabel.Font               = Enum.Font.GothamBold
+miniLabel.Text               = "S"
+miniLabel.TextColor3         = Color3.fromRGB(255, 255, 255)
+miniLabel.TextSize           = 9
+miniLabel.TextWrapped        = true
+miniLabel.TextScaled         = false
+miniLabel.TextXAlignment     = Enum.TextXAlignment.Center
+miniLabel.TextYAlignment     = Enum.TextYAlignment.Center
+miniLabel.ZIndex             = 12
+miniLabel.Visible            = false
+miniLabel.Parent             = container
 
 local function setMinimized(val)
     minimized = val
     if minimized then
         body.Visible     = false
         titleBar.Visible = false
-        container.Size   = UDim2.new(0, 44, 0, 44)
+        container.Size   = UDim2.new(0, 50, 0, 50)
         container.BackgroundColor3 = ACCENT
-        minimizeBtn.Text     = "S"
+        minimizeBtn.Text     = ""
         minimizeBtn.Size     = UDim2.new(1, 0, 1, 0)
         minimizeBtn.Position = UDim2.new(0, 0, 0, 0)
-        minimizeBtn.ZIndex   = 10
+        minimizeBtn.ZIndex   = 11
+        miniLabel.Visible    = true
+        local tName = State.Target and State.Target.Name or "HUB"
+        miniLabel.Text = tName
     else
         body.Visible     = true
         titleBar.Visible = true
-       container.Size   = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
-container.BackgroundColor3 = BG_MAIN
-minimizeBtn.Text     = "−"
-minimizeBtn.Size     = UDim2.new(0, 20, 0, 20)
-minimizeBtn.Position = UDim2.new(1, -26, 0.5, -10)
-minimizeBtn.ZIndex   = 7
+        container.Size   = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+        container.BackgroundColor3 = BG_MAIN
+        minimizeBtn.Text     = "−"
+        minimizeBtn.Size     = UDim2.new(0, 20, 0, 20)
+        minimizeBtn.Position = UDim2.new(1, -26, 0.5, -10)
+        minimizeBtn.ZIndex   = 7
+        miniLabel.Visible    = false
     end
 end
 
