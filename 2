@@ -5145,7 +5145,8 @@ minimizeBtn.Activated:Connect(function()
     setMinimized(true)
 end)
 
-restoreBtn.BackgroundTransparency = 0.99  -- forces touch hitbox to register
+restoreBtn.BackgroundTransparency = 0.99
+restoreBtn.Draggable = true
 restoreBtn.Activated:Connect(function()
     setMinimized(false)
 end)
