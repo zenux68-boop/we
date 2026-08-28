@@ -3109,7 +3109,6 @@ local function fireComboChain()
         end
     end
 
-    -- initial face so the dash starts pointed roughly right
     do
         local mr = getMyRootPart()
         local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
@@ -3127,8 +3126,8 @@ local function fireComboChain()
         end
     end
 
-    -- live tracking: recalculate their back every frame until atBack triggers
     local liveTrackConn
+    local atBackTriggered2 = false
     liveTrackConn = RunService.Heartbeat:Connect(function()
         if atBackTriggered2 or not comboInProgress2 then
             liveTrackConn:Disconnect()
@@ -3155,7 +3154,6 @@ local function fireComboChain()
     end)
 
     local dashFaceConn2
-    local atBackTriggered2 = false
     dashFaceConn2 = RunService.Heartbeat:Connect(function()
         if not comboInProgress2 then dashFaceConn2:Disconnect(); return end
         local mr = getMyRootPart()
@@ -3188,16 +3186,13 @@ local function fireComboChain()
     end)
 
     RunService.Heartbeat:Wait()
-   ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+    ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
     task.wait(0.02)
 
     task.spawn(function()
         task.wait(0.08)
 
-        local dashConfirmed = false
-        local watchConn
         local startPos
-
         local char     = LocalPlayer.Character
         local hum      = char and char:FindFirstChildOfClass("Humanoid")
         local animator = hum and hum:FindFirstChildOfClass("Animator")
@@ -3209,6 +3204,16 @@ local function fireComboChain()
             ["rbxassetid://77705898607209"]  = true,
         }
 
+        -- THE CLEAN CORE: fire, dash, then exactly 0.27s later fire again
+        fireDivergentFist()
+        tapBtn(dashBtn)
+        task.delay(0.27, function()
+            fireDivergentFist()
+        end)
+
+        -- glide runs independently without affecting the timing above
+        local dashConfirmed = false
+        local watchConn
         if animator then
             watchConn = animator.AnimationPlayed:Connect(function(track)
                 if DashAnimations[track.Animation.AnimationId] then
@@ -3219,83 +3224,56 @@ local function fireComboChain()
             end)
         end
 
-        fireDivergentFist()
-        tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
-       ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
-
-        if not animator then return end
+        ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
         local watchTimeout = tick() + 0.4
         while not dashConfirmed and tick() < watchTimeout do
             RunService.Heartbeat:Wait()
         end
 
-        if not dashConfirmed then
-            if watchConn then watchConn:Disconnect() end
-            return
-        end
+        if dashConfirmed and startPos then
+            local glideStart    = tick()
+            local glideDuration = 0.25
+            local glideConn
+            glideConn = RunService.Heartbeat:Connect(function()
+                local mr = getMyRootPart()
+                local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+                if not mr or not tr or not startPos then glideConn:Disconnect(); return end
 
-        local glideStart    = tick()
-        local glideDuration = 0.25
+                local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
+                local stillAtBack = false
+                if toMe.Magnitude > 0.01 then
+                    local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+                    stillAtBack = theirFwd:Dot(toMe.Unit) < BACK_DOT
+                end
 
-        local glideConn
-        glideConn = RunService.Heartbeat:Connect(function()
-            local mr = getMyRootPart()
-            local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-            if not mr or not tr or not startPos then glideConn:Disconnect(); return end
+                if alreadyAtBack and stillAtBack then
+                    startPos = mr.Position
+                    return
+                end
 
-            local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
-            local stillAtBack = false
-            if toMe.Magnitude > 0.01 then
-                local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
-                stillAtBack = theirFwd:Dot(toMe.Unit) < BACK_DOT
-            end
+                alreadyAtBack = false
+                local alpha = math.clamp((tick() - glideStart) / glideDuration, 0, 1)
+                local t = 1 - (1 - alpha)^2
 
-            if alreadyAtBack and stillAtBack then
-                startPos = mr.Position
-                return
-            end
+                local behindDir = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
+                local endPos = Vector3.new(
+                    tr.Position.X - behindDir.X * 7, mr.Position.Y,
+                    tr.Position.Z - behindDir.Z * 7
+                )
 
-            alreadyAtBack = false
-            local alpha = math.clamp((tick() - glideStart) / glideDuration, 0, 1)
-            local t = 1 - (1 - alpha)^2
+                local newPos = Vector3.new(
+                    startPos.X + (endPos.X - startPos.X) * t,
+                    mr.Position.Y,
+                    startPos.Z + (endPos.Z - startPos.Z) * t
+                )
 
-            local behindDir = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
-           local endPos = Vector3.new(
-                tr.Position.X - behindDir.X * 7, mr.Position.Y,
-                tr.Position.Z - behindDir.Z * 7
-            )
-
-            local newPos = Vector3.new(
-                startPos.X + (endPos.X - startPos.X) * t,
-                mr.Position.Y,
-                startPos.Z + (endPos.Z - startPos.Z) * t
-            )
-
-            mr.CFrame = CFrame.new(newPos, Vector3.new(tr.Position.X, newPos.Y, tr.Position.Z))
-            if alpha >= 1 then glideConn:Disconnect() end
-        end)
-    end)
-
-    task.spawn(function()
-        task.wait(0.20)
-        task.delay(CHAIN_INTERVAL, function()
-            fireDivergentFist()
-            task.delay(0.29, function()
-                State.AnglePredActive  = false
-                State.AnglePredEndTime = 0
-                comboInProgress2       = false
-                comboManualArmed2      = false
-                releaseTempCharLock()
-                task.delay(0.1, function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChildOfClass("Humanoid")
-                    if h then h.AutoRotate = true end
-                end)
+                mr.CFrame = CFrame.new(newPos, Vector3.new(tr.Position.X, newPos.Y, tr.Position.Z))
+                if alpha >= 1 then glideConn:Disconnect() end
             end)
-        end)
+        end
     end)
 
     task.delay(2, function()
@@ -3310,7 +3288,6 @@ local function fireComboChain()
         if h then h.AutoRotate = true end
     end)
 end
-
 
 RunService.Heartbeat:Connect(function()
     if not State.Locked or not State.Target then
@@ -3814,8 +3791,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 and State.Target
                 and isInRange(State.Target, COMBO.Range)
             then
-                fireDivergentFist()
-                tapBtn(dashBtn)
                 comboManualArmed2 = true
                 local c = LocalPlayer.Character
                 local h = c and c:FindFirstChildOfClass("Humanoid")
