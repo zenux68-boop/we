@@ -2901,7 +2901,7 @@ local function fireCombo()
     State.AnglePredActive  = true
     State.AnglePredEndTime = math.huge
 
-    task.delay(0.05, function()
+    task.delay(0.001, function()
         comboM1WindowUntil = tick() + 0.16
         tapM1()
     end)
@@ -2924,52 +2924,13 @@ local function fireCombo()
         end
     end
 
-    local dashFaceActive  = true
-    local qHasFired = false
-
-    task.spawn(function()
-        while dashFaceActive do
-            RunService.Heartbeat:Wait()
-            if not dashFaceActive then break end
-            local mr = getMyRootPart()
-            local tr = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-            local tp = target and getTargetPosition(target)
-            if not mr or not tr or not tp then break end
-
-            local toMe = Vector3.new(mr.Position.X - tr.Position.X, 0, mr.Position.Z - tr.Position.Z)
-
-            if toMe.Magnitude > 0.01 then
-                local theirFwd = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
-                if theirFwd:Dot(toMe.Unit) < BACK_DOT then
-                    dashFaceActive         = false
-                    State.AnglePredActive  = false
-                    State.AnglePredEndTime = 0
-                    State.comboDashLock    = false
-                    break
-                end
-            end
-
-            if not qHasFired then
-                local toTgt = Vector3.new(tp.X - mr.Position.X, 0, tp.Z - mr.Position.Z)
-                if toTgt.Magnitude < 0.01 then continue end
-                toTgt = toTgt.Unit
-                local angleDeg = (sideKey == Enum.KeyCode.A) and 80 or -80
-                local rad = math.rad(angleDeg)
-                local dashDir = Vector3.new(
-                    toTgt.X * math.cos(rad) - toTgt.Z * math.sin(rad),
-                    0,
-                    toTgt.X * math.sin(rad) + toTgt.Z * math.cos(rad)
-                ).Unit
-                mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
-            end
-        end
-    end)
+    local dashFaceActive = true
 
     RunService.Heartbeat:Wait()
- ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
+    ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
 
     task.spawn(function()
-        task.wait(0.08)
+        task.wait(0.015)
 
         local dashConfirmed = false
         local watchConn
@@ -2996,10 +2957,29 @@ local function fireCombo()
             end)
         end
 
-        qHasFired = true
+        -- snap angle and fire dash simultaneously
+        do
+            local mr = getMyRootPart()
+            local tp = target and getTargetPosition(target)
+            if mr and tp then
+                local toTgt = Vector3.new(tp.X - mr.Position.X, 0, tp.Z - mr.Position.Z)
+                if toTgt.Magnitude >= 0.01 then
+                    toTgt = toTgt.Unit
+                    local angleDeg = (sideKey == Enum.KeyCode.A) and 80 or -80
+                    local rad = math.rad(angleDeg)
+                    local dashDir = Vector3.new(
+                        toTgt.X * math.cos(rad) - toTgt.Z * math.sin(rad),
+                        0,
+                        toTgt.X * math.sin(rad) + toTgt.Z * math.cos(rad)
+                    ).Unit
+                    mr.CFrame = CFrame.new(mr.Position, mr.Position + dashDir)
+                end
+            end
+        end
+
         tapBtn(dashBtn)
         task.wait(0.03)
-        task.wait(0.03)
+        task.wait(0.02)
         ControlModule.activeController.moveVector = Vector3.new(0, 0, 0)
 
         if not animator then return end
@@ -3045,11 +3025,11 @@ local function fireCombo()
     end)
 
     task.spawn(function()
-        task.wait(0.20)
+        task.wait(0.15)
         dashFaceActive = false
         ControlModule.activeController.moveVector = Vector3.new(0, 0, -1)
         task.delay(0.1, function() ControlModule.activeController.moveVector = Vector3.new(0, 0, 0) end)
-        task.delay(0.15, function()
+        task.delay(0.12, function()
             State.comboDashLock    = false
             State.AnglePredActive  = false
             State.AnglePredEndTime = 0
@@ -3218,7 +3198,7 @@ local function fireComboChain()
 
     RunService.Heartbeat:Wait()
    ControlModule.activeController.moveVector = sideKey == Enum.KeyCode.A and Vector3.new(-1, 0, 0) or Vector3.new(1, 0, 0)
-    
+    task.wait(0.02)
 
     task.spawn(function()
         task.wait(0.08)
@@ -3292,9 +3272,9 @@ local function fireComboChain()
             local t = 1 - (1 - alpha)^2
 
             local behindDir = Vector3.new(tr.CFrame.LookVector.X, 0, tr.CFrame.LookVector.Z).Unit
-            local endPos = Vector3.new(
-                tr.Position.X - behindDir.X * 4, mr.Position.Y,
-                tr.Position.Z - behindDir.Z * 4
+           local endPos = Vector3.new(
+                tr.Position.X - behindDir.X * 7, mr.Position.Y,
+                tr.Position.Z - behindDir.Z * 7
             )
 
             local newPos = Vector3.new(
@@ -3310,19 +3290,16 @@ local function fireComboChain()
 
     task.spawn(function()
         task.wait(0.20)
-        task.delay(CHAIN_INTERVAL, function()
-            fireDivergentFist()
-            task.delay(0.29, function()
-                State.AnglePredActive  = false
-                State.AnglePredEndTime = 0
-                comboInProgress2       = false
-                comboManualArmed2      = false
-                releaseTempCharLock()
-                task.delay(0.1, function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChildOfClass("Humanoid")
-                    if h then h.AutoRotate = true end
-                end)
+        task.delay(0.29, function()
+            State.AnglePredActive  = false
+            State.AnglePredEndTime = 0
+            comboInProgress2       = false
+            comboManualArmed2      = false
+            releaseTempCharLock()
+            task.delay(0.1, function()
+                local c = LocalPlayer.Character
+                local h = c and c:FindFirstChildOfClass("Humanoid")
+                if h then h.AutoRotate = true end
             end)
         end)
     end)
