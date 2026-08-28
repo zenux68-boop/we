@@ -5108,42 +5108,46 @@ miniLabel.ZIndex             = 12
 miniLabel.Visible            = false
 miniLabel.Parent             = container
 
+-- Separate full-container restore button, always on top
+local restoreBtn = Instance.new("TextButton")
+restoreBtn.Name             = "RestoreBtn"
+restoreBtn.Size             = UDim2.new(1, 0, 1, 0)
+restoreBtn.Position         = UDim2.new(0, 0, 0, 0)
+restoreBtn.BackgroundTransparency = 1
+restoreBtn.Text             = ""
+restoreBtn.BorderSizePixel  = 0
+restoreBtn.ZIndex           = 15
+restoreBtn.Visible          = false
+restoreBtn.Parent           = container
+
 local function setMinimized(val)
     minimized = val
     if minimized then
-        body.Visible     = false
-        titleBar.Visible = false
-        container.Size   = UDim2.new(0, 50, 0, 50)
+        body.Visible               = false
+        titleBar.Visible           = false
+        container.Size             = UDim2.new(0, 50, 0, 50)
         container.BackgroundColor3 = ACCENT
-        minimizeBtn.Text     = ""
-        minimizeBtn.Size     = UDim2.new(1, 0, 1, 0)
-        minimizeBtn.Position = UDim2.new(0, 0, 0, 0)
-        minimizeBtn.ZIndex   = 11
-        miniLabel.Visible    = true
+        restoreBtn.Visible         = true
+        miniLabel.Visible          = true
         local tName = State.Target and State.Target.Name or "HUB"
         miniLabel.Text = tName
     else
-        body.Visible     = true
-        titleBar.Visible = true
-        container.Size   = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+        body.Visible               = true
+        titleBar.Visible           = true
+        container.Size             = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
         container.BackgroundColor3 = BG_MAIN
-        minimizeBtn.Text     = "−"
-        minimizeBtn.Size     = UDim2.new(0, 20, 0, 20)
-        minimizeBtn.Position = UDim2.new(1, -26, 0.5, -10)
-        minimizeBtn.ZIndex   = 7
-        miniLabel.Visible    = false
+        restoreBtn.Visible         = false
+        miniLabel.Visible          = false
     end
 end
 
 minimizeBtn.MouseButton1Click:Connect(function()
-    if minimized then
-        setMinimized(false)
-    else
-        setMinimized(true)
-    end
+    setMinimized(true)
 end)
 
-container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+restoreBtn.MouseButton1Click:Connect(function()
+    setMinimized(false)
+end)
 end
 
 buildDashWidget()
