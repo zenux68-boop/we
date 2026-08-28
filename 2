@@ -3820,8 +3820,8 @@ local function buildDashWidget()
     floatingDashWidget = sg
 
    local frame = Instance.new("Frame")
-frame.Size                   = UDim2.new(0, 100, 0, 26)
-frame.Position               = UDim2.new(0.5, -50, 0, 12)
+frame.Size                   = UDim2.new(0, 144, 0, 38)
+frame.Position               = UDim2.new(0.5, -72, 0, 12)
     frame.BackgroundColor3       = Color3.fromRGB(10, 10, 13)
     frame.BackgroundTransparency = 0
     frame.BorderSizePixel        = 0
@@ -3972,9 +3972,9 @@ local function buildGui()
     local TOGGLE_ON = Color3.fromRGB(60, 200, 110)
     local BORDER    = Color3.fromRGB(40, 40, 52)
 
-    local TOTAL_W = 232
-local TOTAL_H = 208
-local TAB_W   = 52
+    local TOTAL_W = 319
+local TOTAL_H = 286
+local TAB_W   = 72
 local CONTENT_W = TOTAL_W - TAB_W
 
     local container = Instance.new("Frame")
@@ -3995,8 +3995,8 @@ local CONTENT_W = TOTAL_W - TAB_W
     rootStroke.Parent       = container
 
     local titleBar = Instance.new("Frame")
-    titleBar.Name             = "TitleBar"
-    titleBar.Size             = UDim2.new(1, 0, 0, 38)
+titleBar.Name             = "TitleBar"
+titleBar.Size             = UDim2.new(1, 0, 0, 28)
     titleBar.BackgroundColor3 = Color3.fromRGB(13, 13, 17)
     titleBar.BorderSizePixel  = 0
     titleBar.ZIndex           = 5
@@ -4029,7 +4029,7 @@ local CONTENT_W = TOTAL_W - TAB_W
     titleLbl.Font               = Enum.Font.GothamBold
     titleLbl.Text = "SCRIPTIFY HUB"
     titleLbl.TextColor3         = TEXT_PRI
-    titleLbl.TextSize           = 14
+    titleLbl.TextSize           = 10
     titleLbl.TextXAlignment     = Enum.TextXAlignment.Left
     titleLbl.ZIndex             = 6
     titleLbl.Parent             = titleBar
@@ -4064,10 +4064,10 @@ local CONTENT_W = TOTAL_W - TAB_W
     minStroke.Thickness = 1
     minStroke.Parent    = minimizeBtn
 
-    local body = Instance.new("Frame")
-    body.Name             = "Body"
-    body.Size             = UDim2.new(1, 0, 1, -38)
-    body.Position         = UDim2.new(0, 0, 0, 38)
+   local body = Instance.new("Frame")
+body.Name             = "Body"
+body.Size             = UDim2.new(1, 0, 1, -28)
+body.Position         = UDim2.new(0, 0, 0, 28)
     body.BackgroundTransparency = 1
     body.BorderSizePixel  = 0
     body.Parent           = container
@@ -4229,73 +4229,75 @@ local CONTENT_W = TOTAL_W - TAB_W
         end
     end)
 
-    local function makeToggleRow(parent, labelText, isOnDefault, order)
-        local row = Instance.new("Frame")
-        row.Name             = "Row_" .. labelText
-        row.Size             = UDim2.new(1, -16, 0, 36)
-        row.BackgroundColor3 = BG_ITEM
-        row.BorderSizePixel  = 0
-        row.LayoutOrder      = order or 0
-        row.Parent           = parent
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-        local rowStroke = Instance.new("UIStroke")
-        rowStroke.Color     = BORDER
-        rowStroke.Thickness = 1
-        rowStroke.Parent    = row
+   local function makeToggleRow(parent, labelText, isOnDefault, order)
+    local row = Instance.new("Frame")
+    row.Name             = "Row_" .. labelText
+    row.Size             = UDim2.new(1, -8, 0, 28)
+    row.BackgroundColor3 = BG_ITEM
+    row.BorderSizePixel  = 0
+    row.LayoutOrder      = order or 0
+    row.Parent           = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+    local rowStroke = Instance.new("UIStroke")
+    rowStroke.Color     = BORDER
+    rowStroke.Thickness = 1
+    rowStroke.Parent    = row
 
-        local lbl = Instance.new("TextLabel")
-        lbl.Size               = UDim2.new(1, -60, 1, 0)
-        lbl.Position           = UDim2.new(0, 12, 0, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.Font               = Enum.Font.GothamBold
-        lbl.Text               = labelText
-        lbl.TextColor3         = TEXT_PRI
-        lbl.TextSize           = 11
-        lbl.TextXAlignment     = Enum.TextXAlignment.Left
-        lbl.Parent             = row
+    local lbl = Instance.new("TextLabel")
+    lbl.Size               = UDim2.new(1, -50, 1, 0)
+    lbl.Position           = UDim2.new(0, 6, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.Text               = labelText
+    lbl.TextColor3         = TEXT_PRI
+    lbl.TextSize           = 8
+    lbl.TextScaled         = false
+    lbl.TextWrapped        = true
+    lbl.TextXAlignment     = Enum.TextXAlignment.Left
+    lbl.Parent             = row
 
-        local pillBg = Instance.new("Frame")
-        pillBg.Size             = UDim2.new(0, 36, 0, 20)
-        pillBg.Position         = UDim2.new(1, -46, 0.5, -10)
-        pillBg.BackgroundColor3 = isOnDefault and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
-        pillBg.BorderSizePixel  = 0
-        pillBg.Parent           = row
-        Instance.new("UICorner", pillBg).CornerRadius = UDim.new(0, 10)
+    local pillBg = Instance.new("Frame")
+    pillBg.Size             = UDim2.new(0, 28, 0, 16)
+    pillBg.Position         = UDim2.new(1, -34, 0.5, -8)
+    pillBg.BackgroundColor3 = isOnDefault and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
+    pillBg.BorderSizePixel  = 0
+    pillBg.Parent           = row
+    Instance.new("UICorner", pillBg).CornerRadius = UDim.new(0, 8)
 
-        local knob = Instance.new("Frame")
-        knob.Size             = UDim2.new(0, 14, 0, 14)
-        knob.Position         = isOnDefault and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.BorderSizePixel  = 0
-        knob.Parent           = pillBg
-        Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 7)
+    local knob = Instance.new("Frame")
+    knob.Size             = UDim2.new(0, 11, 0, 11)
+    knob.Position         = isOnDefault and UDim2.new(1, -14, 0.5, -5) or UDim2.new(0, 3, 0.5, -5)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel  = 0
+    knob.Parent           = pillBg
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 6)
 
-        local isOn = isOnDefault
+    local isOn = isOnDefault
 
-        local clickBtn = Instance.new("TextButton")
-        clickBtn.Size               = UDim2.new(1, 0, 1, 0)
-        clickBtn.BackgroundTransparency = 1
-        clickBtn.Text               = ""
-        clickBtn.BorderSizePixel    = 0
-        clickBtn.ZIndex             = 2
-        clickBtn.Parent             = row
+    local clickBtn = Instance.new("TextButton")
+    clickBtn.Size               = UDim2.new(1, 0, 1, 0)
+    clickBtn.BackgroundTransparency = 1
+    clickBtn.Text               = ""
+    clickBtn.BorderSizePixel    = 0
+    clickBtn.ZIndex             = 2
+    clickBtn.Parent             = row
 
-        local function setOn(val)
-            isOn = val
-            local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-            TweenService:Create(pillBg, tweenInfo, {
-                BackgroundColor3 = isOn and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
-            }):Play()
-            TweenService:Create(knob, tweenInfo, {
-                Position = isOn and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-            }):Play()
-        end
-
-        local function toggle() setOn(not isOn); return isOn end
-        local function getState() return isOn end
-
-        return row, clickBtn, toggle, getState, lbl, setOn
+    local function setOn(val)
+        isOn = val
+        local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        TweenService:Create(pillBg, tweenInfo, {
+            BackgroundColor3 = isOn and TOGGLE_ON or Color3.fromRGB(60, 60, 70)
+        }):Play()
+        TweenService:Create(knob, tweenInfo, {
+            Position = isOn and UDim2.new(1, -14, 0.5, -5) or UDim2.new(0, 3, 0.5, -5)
+        }):Play()
     end
+
+    local function toggle() setOn(not isOn); return isOn end
+    local function getState() return isOn end
+
+    return row, clickBtn, toggle, getState, lbl, setOn
+end
 
     local function makeKeybindRow(parent, labelText, defaultKey, order)
         local row = Instance.new("Frame")
@@ -4342,207 +4344,208 @@ local CONTENT_W = TOTAL_W - TAB_W
         return row, keyBtn
     end
 
-    local function makeValueRow(parent, labelText, defaultVal, minVal, maxVal, onChanged, order)
-        local row = Instance.new("Frame")
-        row.Name             = "Value_" .. labelText
-        row.Size             = UDim2.new(1, -16, 0, 30)
-        row.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-        row.BorderSizePixel  = 0
-        row.LayoutOrder      = order or 0
-        row.Parent           = parent
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
-        local rStroke = Instance.new("UIStroke")
-        rStroke.Color     = BORDER
-        rStroke.Thickness = 1
-        rStroke.Parent    = row
+  local function makeValueRow(parent, labelText, defaultVal, minVal, maxVal, onChanged, order)
+    local row = Instance.new("Frame")
+    row.Name             = "Value_" .. labelText
+    row.Size             = UDim2.new(1, -8, 0, 24)
+    row.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+    row.BorderSizePixel  = 0
+    row.LayoutOrder      = order or 0
+    row.Parent           = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 5)
+    local rStroke = Instance.new("UIStroke")
+    rStroke.Color     = BORDER
+    rStroke.Thickness = 1
+    rStroke.Parent    = row
 
-        local nameLbl = Instance.new("TextLabel")
-        nameLbl.Size               = UDim2.new(0.6, 0, 1, 0)
-        nameLbl.Position           = UDim2.new(0, 10, 0, 0)
-        nameLbl.BackgroundTransparency = 1
-        nameLbl.Font               = Enum.Font.Gotham
-        nameLbl.Text               = labelText
-        nameLbl.TextColor3         = TEXT_SEC
-        nameLbl.TextSize           = 10
-        nameLbl.TextXAlignment     = Enum.TextXAlignment.Left
-        nameLbl.Parent             = row
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size               = UDim2.new(0.6, 0, 1, 0)
+    nameLbl.Position           = UDim2.new(0, 6, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Font               = Enum.Font.Gotham
+    nameLbl.Text               = labelText
+    nameLbl.TextColor3         = TEXT_SEC
+    nameLbl.TextSize           = 8
+    nameLbl.TextWrapped        = true
+    nameLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    nameLbl.Parent             = row
 
-        local box = Instance.new("TextBox")
-        box.Size             = UDim2.new(0, 64, 0, 20)
-        box.Position         = UDim2.new(1, -72, 0.5, -10)
-        box.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
-        box.Font             = Enum.Font.GothamBold
-        box.Text             = tostring(defaultVal)
-        box.TextColor3       = ACCENT2
-        box.TextSize         = 10
-        box.ClearTextOnFocus = false
-        box.BorderSizePixel  = 0
-        box.Parent           = row
-        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 5)
-        local bStroke = Instance.new("UIStroke")
-        bStroke.Color     = Color3.fromRGB(100, 20, 20)
-        bStroke.Thickness = 1
-        bStroke.Parent    = box
+    local box = Instance.new("TextBox")
+    box.Size             = UDim2.new(0, 48, 0, 16)
+    box.Position         = UDim2.new(1, -54, 0.5, -8)
+    box.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    box.Font             = Enum.Font.GothamBold
+    box.Text             = tostring(defaultVal)
+    box.TextColor3       = ACCENT2
+    box.TextSize         = 8
+    box.ClearTextOnFocus = false
+    box.BorderSizePixel  = 0
+    box.Parent           = row
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    local bStroke = Instance.new("UIStroke")
+    bStroke.Color     = Color3.fromRGB(100, 20, 20)
+    bStroke.Thickness = 1
+    bStroke.Parent    = box
 
-        box.FocusLost:Connect(function()
-            local num = tonumber(box.Text)
-            if num and num >= minVal then
-                num = math.clamp(num, minVal, maxVal)
-                onChanged(num)
-                box.Text = tostring(num)
-            else
-                box.Text = tostring(defaultVal)
-            end
-        end)
+    box.FocusLost:Connect(function()
+        local num = tonumber(box.Text)
+        if num and num >= minVal then
+            num = math.clamp(num, minVal, maxVal)
+            onChanged(num)
+            box.Text = tostring(num)
+        else
+            box.Text = tostring(defaultVal)
+        end
+    end)
 
-        return row, box
-    end
+    return row, box
+end
 
-    local function makeSectionLabel(parent, text, order)
-        local lbl = Instance.new("TextLabel")
-        lbl.Name               = "SectionLbl_" .. text
-        lbl.Size               = UDim2.new(1, -16, 0, 22)
-        lbl.BackgroundTransparency = 1
-        lbl.Font               = Enum.Font.GothamBold
-        lbl.Text               = text
-        lbl.TextColor3         = ACCENT
-        lbl.TextSize           = 10
-        lbl.TextXAlignment     = Enum.TextXAlignment.Left
-        lbl.LayoutOrder        = order or 0
-        lbl.Parent             = parent
-        return lbl
-    end
+local function makeSectionLabel(parent, text, order)
+    local lbl = Instance.new("TextLabel")
+    lbl.Name               = "SectionLbl_" .. text
+    lbl.Size               = UDim2.new(1, -8, 0, 16)
+    lbl.BackgroundTransparency = 1
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.Text               = text
+    lbl.TextColor3         = ACCENT
+    lbl.TextSize           = 8
+    lbl.TextXAlignment     = Enum.TextXAlignment.Left
+    lbl.LayoutOrder        = order or 0
+    lbl.Parent             = parent
+    return lbl
+end
 
-    local function makeStatusChip(parent, text, color, order)
-        local chip = Instance.new("TextLabel")
-        chip.Size               = UDim2.new(1, -16, 0, 26)
-        chip.BackgroundColor3   = Color3.fromRGB(16, 16, 22)
-        chip.BackgroundTransparency = 0
-        chip.Font               = Enum.Font.GothamBold
-        chip.Text               = text
-        chip.TextColor3         = color
-        chip.TextSize           = 10
-        chip.TextXAlignment     = Enum.TextXAlignment.Center
-        chip.BorderSizePixel    = 0
-        chip.LayoutOrder        = order or 0
-        chip.Parent             = parent
-        Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 7)
-        local s = Instance.new("UIStroke")
-        s.Color     = BORDER
-        s.Thickness = 1
-        s.Parent    = chip
-        return chip
-    end
+ local function makeStatusChip(parent, text, color, order)
+    local chip = Instance.new("TextLabel")
+    chip.Size               = UDim2.new(1, -8, 0, 20)
+    chip.BackgroundColor3   = Color3.fromRGB(16, 16, 22)
+    chip.BackgroundTransparency = 0
+    chip.Font               = Enum.Font.GothamBold
+    chip.Text               = text
+    chip.TextColor3         = color
+    chip.TextSize           = 8
+    chip.TextXAlignment     = Enum.TextXAlignment.Center
+    chip.BorderSizePixel    = 0
+    chip.LayoutOrder        = order or 0
+    chip.Parent             = parent
+    Instance.new("UICorner", chip).CornerRadius = UDim.new(0, 5)
+    local s = Instance.new("UIStroke")
+    s.Color     = BORDER
+    s.Thickness = 1
+    s.Parent    = chip
+    return chip
+end
 
-    local function makeInfoBtn(parent, xOffset, infoTitle, infoText)
-        local btn = Instance.new("TextButton")
-        btn.Size             = UDim2.new(0, 80, 0, 22)
-        btn.Position         = UDim2.new(0, xOffset, 0.5, -11)
-        btn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
-        btn.Font             = Enum.Font.Gotham
-        btn.Text             = "ℹ  what is this?"
-        btn.TextColor3       = Color3.fromRGB(160, 80, 255)
-        btn.TextSize         = 9
-        btn.AutoButtonColor  = false
-        btn.BorderSizePixel  = 0
-        btn.ZIndex           = 3
-        btn.Parent           = parent
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
-        local s = Instance.new("UIStroke")
-        s.Color     = Color3.fromRGB(80, 30, 140)
-        s.Thickness = 1
-        s.Parent    = btn
-        btn.MouseButton1Click:Connect(function()
-            showInfoPanel(infoTitle, infoText)
-        end)
-        return btn
-    end
+ local function makeInfoBtn(parent, xOffset, infoTitle, infoText)
+    local btn = Instance.new("TextButton")
+    btn.Size             = UDim2.new(0, 60, 0, 16)
+    btn.Position         = UDim2.new(0, xOffset, 0.5, -8)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 20, 70)
+    btn.Font             = Enum.Font.Gotham
+    btn.Text             = "ℹ info"
+    btn.TextColor3       = Color3.fromRGB(160, 80, 255)
+    btn.TextSize         = 7
+    btn.AutoButtonColor  = false
+    btn.BorderSizePixel  = 0
+    btn.ZIndex           = 3
+    btn.Parent           = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    local s = Instance.new("UIStroke")
+    s.Color     = Color3.fromRGB(80, 30, 140)
+    s.Thickness = 1
+    s.Parent    = btn
+    btn.MouseButton1Click:Connect(function()
+        showInfoPanel(infoTitle, infoText)
+    end)
+    return btn
+end
 
     local tabs      = {}
     local tabFrames = {}
     local activeTab = nil
 
-    local function buildScrollFor(parent)
-        local scroll = Instance.new("ScrollingFrame")
-        scroll.Size                   = UDim2.new(1, 0, 1, 0)
-        scroll.BackgroundTransparency = 1
-        scroll.BorderSizePixel        = 0
-        scroll.ScrollBarThickness     = 3
-        scroll.ScrollBarImageColor3   = ACCENT
-        scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
-        scroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
-        scroll.Parent                 = parent
+  local function buildScrollFor(parent)
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size                   = UDim2.new(1, 0, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel        = 0
+    scroll.ScrollBarThickness     = 2
+    scroll.ScrollBarImageColor3   = ACCENT
+    scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+    scroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+    scroll.Parent                 = parent
 
-        local layout = Instance.new("UIListLayout")
-        layout.Padding             = UDim.new(0, 6)
-        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-        layout.SortOrder           = Enum.SortOrder.LayoutOrder
-        layout.Parent              = scroll
+    local layout = Instance.new("UIListLayout")
+    layout.Padding             = UDim.new(0, 4)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder           = Enum.SortOrder.LayoutOrder
+    layout.Parent              = scroll
 
-        local pad = Instance.new("UIPadding")
-        pad.PaddingTop    = UDim.new(0, 10)
-        pad.PaddingBottom = UDim.new(0, 14)
-        pad.PaddingLeft   = UDim.new(0, 8)
-        pad.PaddingRight  = UDim.new(0, 8)
-        pad.Parent        = scroll
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop    = UDim.new(0, 6)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.PaddingLeft   = UDim.new(0, 4)
+    pad.PaddingRight  = UDim.new(0, 4)
+    pad.Parent        = scroll
 
-        return scroll
-    end
+    return scroll
+end
 
-    local function addTab(name, icon, order)
-        local tabBtn = Instance.new("TextButton")
-        tabBtn.Name             = "Tab_" .. name
-        tabBtn.Size             = UDim2.new(1, 0, 0, 38)
-        tabBtn.BackgroundColor3 = BG_TAB
-        tabBtn.Font             = Enum.Font.GothamBold
-        tabBtn.Text             = icon .. "  " .. name
-        tabBtn.TextColor3       = TEXT_SEC
-        tabBtn.TextSize         = 11
-        tabBtn.AutoButtonColor  = false
-        tabBtn.BorderSizePixel  = 0
-        tabBtn.LayoutOrder      = order
-        tabBtn.Parent           = tabBar
-        Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 8)
 
-        local selBar = Instance.new("Frame")
-        selBar.Size             = UDim2.new(0, 3, 0.7, 0)
-        selBar.Position         = UDim2.new(0, 0, 0.15, 0)
-        selBar.BackgroundColor3 = ACCENT2
-        selBar.BorderSizePixel  = 0
-        selBar.Visible          = false
-        selBar.Parent           = tabBtn
-        Instance.new("UICorner", selBar).CornerRadius = UDim.new(0, 2)
+local function addTab(name, icon, order)
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Name             = "Tab_" .. name
+    tabBtn.Size             = UDim2.new(1, 0, 0, 30)
+    tabBtn.BackgroundColor3 = BG_TAB
+    tabBtn.Font             = Enum.Font.GothamBold
+    tabBtn.Text             = icon
+    tabBtn.TextColor3       = TEXT_SEC
+    tabBtn.TextSize         = 14
+    tabBtn.AutoButtonColor  = false
+    tabBtn.BorderSizePixel  = 0
+    tabBtn.LayoutOrder      = order
+    tabBtn.Parent           = tabBar
+    Instance.new("UICorner", tabBtn).CornerRadius = UDim.new(0, 6)
 
-        local frame = Instance.new("Frame")
-        frame.Name             = "Content_" .. name
-        frame.Size             = UDim2.new(1, 0, 1, 0)
-        frame.BackgroundTransparency = 1
-        frame.BorderSizePixel  = 0
-        frame.Visible          = false
-        frame.Parent           = contentPanel
+    local selBar = Instance.new("Frame")
+    selBar.Size             = UDim2.new(0, 2, 0.7, 0)
+    selBar.Position         = UDim2.new(0, 0, 0.15, 0)
+    selBar.BackgroundColor3 = ACCENT2
+    selBar.BorderSizePixel  = 0
+    selBar.Visible          = false
+    selBar.Parent           = tabBtn
+    Instance.new("UICorner", selBar).CornerRadius = UDim.new(0, 2)
 
-        local scroll = buildScrollFor(frame)
+    local frame = Instance.new("Frame")
+    frame.Name             = "Content_" .. name
+    frame.Size             = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel  = 0
+    frame.Visible          = false
+    frame.Parent           = contentPanel
 
-        tabs[name]      = { btn = tabBtn, selBar = selBar }
-        tabFrames[name] = { frame = frame, scroll = scroll }
+    local scroll = buildScrollFor(frame)
 
-        tabBtn.MouseButton1Click:Connect(function()
-            if activeTab then
-                tabs[activeTab].btn.TextColor3       = TEXT_SEC
-                tabs[activeTab].btn.BackgroundColor3 = BG_TAB
-                tabs[activeTab].selBar.Visible       = false
-                tabFrames[activeTab].frame.Visible   = false
-            end
-            activeTab                  = name
-            tabBtn.TextColor3          = TEXT_PRI
-            tabBtn.BackgroundColor3    = TAB_SEL
-            selBar.Visible             = true
-            frame.Visible              = true
-        end)
+    tabs[name]      = { btn = tabBtn, selBar = selBar }
+    tabFrames[name] = { frame = frame, scroll = scroll }
 
-        return scroll
-    end
+    tabBtn.MouseButton1Click:Connect(function()
+        if activeTab then
+            tabs[activeTab].btn.TextColor3       = TEXT_SEC
+            tabs[activeTab].btn.BackgroundColor3 = BG_TAB
+            tabs[activeTab].selBar.Visible       = false
+            tabFrames[activeTab].frame.Visible   = false
+        end
+        activeTab                  = name
+        tabBtn.TextColor3          = TEXT_PRI
+        tabBtn.BackgroundColor3    = TAB_SEL
+        selBar.Visible             = true
+        frame.Visible              = true
+    end)
 
+    return scroll
+end
     local combatScroll  = addTab("COMBAT",  "⚔",  1)
     local yujiScroll    = addTab("YUJI",    "⚡",  2)
     local flightScroll  = addTab("FLIGHT",  "✈",  3)
@@ -5087,26 +5090,32 @@ makeInfoBtn(bfcRow, 118, "AUTO BLACKFLASH CHAIN", "Only works with lock on enabl
     end
 
    local minimized = false
-minimizeBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
+
+local function setMinimized(val)
+    minimized = val
     if minimized then
-        body.Visible = false
+        body.Visible     = false
         titleBar.Visible = false
-        container.Size = UDim2.new(0, 44, 0, 44)
+        container.Size   = UDim2.new(0, 44, 0, 44)
         container.BackgroundColor3 = ACCENT
-        Instance.new("UICorner", container).CornerRadius = UDim.new(0.5, 0)
-        minimizeBtn.Text = "S"
-        minimizeBtn.Size = UDim2.new(1, 0, 1, 0)
+        minimizeBtn.Text     = "S"
+        minimizeBtn.Size     = UDim2.new(1, 0, 1, 0)
         minimizeBtn.Position = UDim2.new(0, 0, 0, 0)
+        minimizeBtn.ZIndex   = 10
     else
-        body.Visible = true
+        body.Visible     = true
         titleBar.Visible = true
-        container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
-        container.BackgroundColor3 = BG_MAIN
-        minimizeBtn.Text = "−"
-        minimizeBtn.Size = UDim2.new(0, 26, 0, 26)
-        minimizeBtn.Position = UDim2.new(1, -34, 0.5, -13)
+       container.Size   = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+container.BackgroundColor3 = BG_MAIN
+minimizeBtn.Text     = "−"
+minimizeBtn.Size     = UDim2.new(0, 20, 0, 20)
+minimizeBtn.Position = UDim2.new(1, -26, 0.5, -10)
+minimizeBtn.ZIndex   = 7
     end
+end
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    setMinimized(not minimized)
 end)
 
 container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
