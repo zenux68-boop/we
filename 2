@@ -3208,8 +3208,16 @@ local function fireComboChain()
         fireDivergentFist()
         tapBtn(dashBtn)
         task.delay(0.27, function()
-            fireDivergentFist()
-        end)
+    fireDivergentFist()
+    task.delay(0.1, function()
+        comboInProgress2 = false
+        comboManualArmed2 = false
+        releaseTempCharLock()
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h then h.AutoRotate = true end
+    end)
+end)
 
         -- glide runs independently without affecting the timing above
         local dashConfirmed = false
