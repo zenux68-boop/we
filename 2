@@ -704,16 +704,7 @@ local chainM1SuppressUntil = 0
 local lockingAtBack        = false
 local anglePredLockActive  = false
 local comboM1WindowUntil   = 0
-local AnimationTriggers = {
-    ["rbxassetid://100962226150441"] = 0.19,
-    ["rbxassetid://95852624447551"]  = 0.19,
-    ["rbxassetid://74145636023952"]  = 0.19,
-    ["rbxassetid://72475960800126"]  = 0.20,
-}
 
-local StraightAnimations = {
-    ["rbxassetid://123171106092050"] = true,
-}
 
 local GUI_API = {}
 
@@ -3290,16 +3281,19 @@ local function fireComboChain()
 
     task.spawn(function()
         task.wait(0.20)
-        task.delay(0.29, function()
-            State.AnglePredActive  = false
-            State.AnglePredEndTime = 0
-            comboInProgress2       = false
-            comboManualArmed2      = false
-            releaseTempCharLock()
-            task.delay(0.1, function()
-                local c = LocalPlayer.Character
-                local h = c and c:FindFirstChildOfClass("Humanoid")
-                if h then h.AutoRotate = true end
+        task.delay(CHAIN_INTERVAL, function()
+            fireDivergentFist()
+            task.delay(0.29, function()
+                State.AnglePredActive  = false
+                State.AnglePredEndTime = 0
+                comboInProgress2       = false
+                comboManualArmed2      = false
+                releaseTempCharLock()
+                task.delay(0.1, function()
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChildOfClass("Humanoid")
+                    if h then h.AutoRotate = true end
+                end)
             end)
         end)
     end)
@@ -3403,26 +3397,9 @@ end
 
 RunService.Heartbeat:Connect(updateLeftClickBlock)
 
-local function setupAnimationWatcher(character)
-    local humanoid = character:WaitForChild("Humanoid", 5)
-    local animator = humanoid and humanoid:WaitForChild("Animator", 5)
-    if not animator then return end
-    animator.AnimationPlayed:Connect(function(track)
-        local animId = track.Animation.AnimationId
-        local delayTime = AnimationTriggers[animId]
-        if not delayTime and StraightAnimations[animId] then delayTime = 0.19 end
-        if delayTime then
-            task.delay(delayTime, function()
-                if humanoid.Health > 0 then
-                    fireDivergentFist()
-                end
-            end)
-        end
-    end)
-end
 
-if LocalPlayer.Character then setupAnimationWatcher(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(setupAnimationWatcher)
+
+
 
 --========================================================================
 -- FLIGHT PHYSICS SETUP
