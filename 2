@@ -3814,6 +3814,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 and State.Target
                 and isInRange(State.Target, COMBO.Range)
             then
+                fireDivergentFist()
                 comboManualArmed2 = true
                 local c = LocalPlayer.Character
                 local h = c and c:FindFirstChildOfClass("Humanoid")
