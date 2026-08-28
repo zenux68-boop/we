@@ -3801,6 +3801,7 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 local c = LocalPlayer.Character
                 local h = c and c:FindFirstChildOfClass("Humanoid")
                 if h then h.AutoRotate = false end
+                fireDivergentFist()
                 task.delay(0.27, function()
                     fireDivergentFist()
                 end)
