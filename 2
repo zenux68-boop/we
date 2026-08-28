@@ -3219,7 +3219,7 @@ local function fireComboChain()
             end)
         end
 
-        
+        fireDivergentFist()
         tapBtn(dashBtn)
         task.wait(0.03)
         task.wait(0.03)
@@ -3279,7 +3279,24 @@ local function fireComboChain()
         end)
     end)
 
-    
+    task.spawn(function()
+        task.wait(0.20)
+        task.delay(CHAIN_INTERVAL, function()
+            fireDivergentFist()
+            task.delay(0.29, function()
+                State.AnglePredActive  = false
+                State.AnglePredEndTime = 0
+                comboInProgress2       = false
+                comboManualArmed2      = false
+                releaseTempCharLock()
+                task.delay(0.1, function()
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChildOfClass("Humanoid")
+                    if h then h.AutoRotate = true end
+                end)
+            end)
+        end)
+    end)
 
     task.delay(2, function()
         State.AnglePredActive  = false
@@ -3801,7 +3818,6 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
                 local c = LocalPlayer.Character
                 local h = c and c:FindFirstChildOfClass("Humanoid")
                 if h then h.AutoRotate = false end
-                fireDivergentFist()
                 task.delay(0.27, function()
                     fireDivergentFist()
                 end)
