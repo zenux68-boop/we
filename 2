@@ -5136,12 +5136,10 @@ local function setMinimized(val)
 end
 
 minimizeBtn.MouseButton1Click:Connect(function()
-    setMinimized(not minimized)
-end)
-
-container.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and minimized then
+    if minimized then
         setMinimized(false)
+    else
+        setMinimized(true)
     end
 end)
 
