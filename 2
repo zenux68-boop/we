@@ -3819,9 +3819,9 @@ local function buildDashWidget()
     sg.Parent         = pg
     floatingDashWidget = sg
 
-    local frame = Instance.new("Frame")
-    frame.Size                   = UDim2.new(0, 160, 0, 42)
-    frame.Position               = UDim2.new(0.5, -80, 0, 60)
+   local frame = Instance.new("Frame")
+frame.Size                   = UDim2.new(0, 100, 0, 26)
+frame.Position               = UDim2.new(0.5, -50, 0, 12)
     frame.BackgroundColor3       = Color3.fromRGB(10, 10, 13)
     frame.BackgroundTransparency = 0
     frame.BorderSizePixel        = 0
@@ -3842,7 +3842,7 @@ local function buildDashWidget()
     lbl.Font               = Enum.Font.GothamBold
     lbl.Text               = "DON'T DASH"
     lbl.TextColor3         = Color3.fromRGB(180, 40, 40)
-    lbl.TextSize           = 16
+    lbl.TextSize           = 10
     lbl.Parent             = frame
     dashWidgetLabel = lbl
 
@@ -3972,10 +3972,10 @@ local function buildGui()
     local TOGGLE_ON = Color3.fromRGB(60, 200, 110)
     local BORDER    = Color3.fromRGB(40, 40, 52)
 
-    local TOTAL_W = 580
-    local TOTAL_H = 520
-    local TAB_W   = 130
-    local CONTENT_W = TOTAL_W - TAB_W
+    local TOTAL_W = 232
+local TOTAL_H = 208
+local TAB_W   = 52
+local CONTENT_W = TOTAL_W - TAB_W
 
     local container = Instance.new("Frame")
     container.Name                   = "Container"
@@ -4601,11 +4601,12 @@ local function buildGui()
         local function buildLockCircle()
             if lockCircleGui then lockCircleGui:Destroy(); lockCircleGui = nil end
             local pg = LocalPlayer:WaitForChild("PlayerGui")
-            local sg = Instance.new("ScreenGui")
-            sg.Name           = "LockCircleGui"
-            sg.ResetOnSpawn   = false
-            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            sg.Parent         = pg
+           local sg = Instance.new("ScreenGui")
+sg.Name           = "LockCircleGui"
+sg.ResetOnSpawn   = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+sg.DisplayOrder   = 999
+sg.Parent         = pg
             lockCircleGui = sg
 
             local circle = Instance.new("TextButton")
@@ -4655,11 +4656,20 @@ local function buildGui()
             end)
         end
 
-        local lcRow, lcClick, lcToggle, lcGet, _, lcSetOn =
-            makeToggleRow(s, "LOCK CIRCLE BUTTON", true, 4)
-        makeInfoBtn(lcRow, 140,
-            "LOCK CIRCLE BUTTON",
-            "Shows a draggable circular LOCK button on the left side of your screen. Click it to toggle lock-on without needing a keyboard key.")
+      local lcRow, lcClick, lcToggle, lcGet, _, lcSetOn =
+    makeToggleRow(s, "LOCK CIRCLE BUTTON", true, 4)
+makeInfoBtn(lcRow, 140,
+    "LOCK CIRCLE BUTTON",
+    "Shows a draggable circular LOCK button on the left side of your screen. Click it to toggle lock-on without needing a keyboard key.")
+
+local _, lockSizeBox = makeValueRow(s, "Lock Circle Size", 64, 20, 200, function(num)
+    if lockCircleGui then
+        local c = lockCircleGui:FindFirstChildWhichIsA("TextButton", true)
+        if c then
+            c.Size = UDim2.new(0, num, 0, num)
+        end
+    end
+end, 4)
 
         if lockCircleEnabled then buildLockCircle() end
 
@@ -4799,10 +4809,11 @@ local function buildGui()
             if dashCircleGui then dashCircleGui:Destroy(); dashCircleGui = nil end
             local pg = LocalPlayer:WaitForChild("PlayerGui")
             local sg = Instance.new("ScreenGui")
-            sg.Name           = "DashCircleGui"
-            sg.ResetOnSpawn   = false
-            sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            sg.Parent         = pg
+sg.Name           = "DashCircleGui"
+sg.ResetOnSpawn   = false
+sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+sg.DisplayOrder   = 999
+sg.Parent         = pg
             dashCircleGui = sg
 
             local circle = Instance.new("TextButton")
@@ -4852,11 +4863,20 @@ local function buildGui()
             end)
         end
 
-        local dcRow, dcClick, dcToggle, dcGet =
-            makeToggleRow(s, "DASH CIRCLE BUTTON", true, 12)
-        makeInfoBtn(dcRow, 140,
-            "DASH CIRCLE BUTTON",
-            "Shows a draggable circular DASH button below the LOCK circle. Tap it to trigger a sidedash toward your locked target instead of using a keyboard key.")
+       local dcRow, dcClick, dcToggle, dcGet =
+    makeToggleRow(s, "DASH CIRCLE BUTTON", true, 12)
+makeInfoBtn(dcRow, 140,
+    "DASH CIRCLE BUTTON",
+    "Shows a draggable circular DASH button below the LOCK circle. Tap it to trigger a sidedash toward your locked target instead of using a keyboard key.")
+
+local _, dashSizeBox = makeValueRow(s, "Dash Circle Size", 64, 20, 200, function(num)
+    if dashCircleGui then
+        local c = dashCircleGui:FindFirstChildWhichIsA("TextButton", true)
+        if c then
+            c.Size = UDim2.new(0, num, 0, num)
+        end
+    end
+end, 12)
 
         if dashCircleEnabled then buildDashCircle() end
 
@@ -4945,8 +4965,9 @@ local function buildGui()
 
         makeSectionLabel(s, "BLACK FLASH CHAIN", 1)
 
-        local bfcRow, bfcClick, bfcToggle, bfcGet = makeToggleRow(s, "AUTO BLACKFLASH CHAIN", false, 2)
-        bfcClick.MouseButton1Click:Connect(function() bfcToggle(); bfChainEnabled = bfcGet() end)
+local bfcRow, bfcClick, bfcToggle, bfcGet = makeToggleRow(s, "AUTO BLACKFLASH CHAIN", false, 2)
+bfcClick.MouseButton1Click:Connect(function() bfcToggle(); bfChainEnabled = bfcGet() end)
+makeInfoBtn(bfcRow, 118, "AUTO BLACKFLASH CHAIN", "Only works with lock on enabled. To do a black flash chain: get close to your target and tap the Divergent Fist button in the game once. Do not spam it.")
 
         makeSectionLabel(s, "MANJI KICK", 3)
 
@@ -5065,28 +5086,30 @@ local function buildGui()
         _origUpdateLeftClickBlock()
     end
 
-    local minimized = false
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        minimizeBtn.Text = minimized and "+" or "−"
-        body.Visible     = not minimized
-        local fromH  = minimized and TOTAL_H or 38
-        local toH    = minimized and 38 or TOTAL_H
-        local dur    = 0.22
-        local startT = tick()
-        container.ClipsDescendants = true
-        while true do
-            local alpha = math.clamp((tick() - startT) / dur, 0, 1)
-            local ease  = 1 - (1 - alpha)^3
-            container.Size = UDim2.new(0, TOTAL_W, 0, math.floor(fromH + (toH - fromH) * ease))
-            if alpha >= 1 then break end
-            RunService.Heartbeat:Wait()
-        end
-        container.Size             = UDim2.new(0, TOTAL_W, 0, toH)
-        container.ClipsDescendants = minimized
-    end)
+   local minimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        body.Visible = false
+        titleBar.Visible = false
+        container.Size = UDim2.new(0, 44, 0, 44)
+        container.BackgroundColor3 = ACCENT
+        Instance.new("UICorner", container).CornerRadius = UDim.new(0.5, 0)
+        minimizeBtn.Text = "S"
+        minimizeBtn.Size = UDim2.new(1, 0, 1, 0)
+        minimizeBtn.Position = UDim2.new(0, 0, 0, 0)
+    else
+        body.Visible = true
+        titleBar.Visible = true
+        container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+        container.BackgroundColor3 = BG_MAIN
+        minimizeBtn.Text = "−"
+        minimizeBtn.Size = UDim2.new(0, 26, 0, 26)
+        minimizeBtn.Position = UDim2.new(1, -34, 0.5, -13)
+    end
+end)
 
-    container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
+container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
 end
 
 buildDashWidget()
