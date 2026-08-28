@@ -5139,6 +5139,12 @@ minimizeBtn.MouseButton1Click:Connect(function()
     setMinimized(not minimized)
 end)
 
+container.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and minimized then
+        setMinimized(false)
+    end
+end)
+
 container.Size = UDim2.new(0, TOTAL_W, 0, TOTAL_H)
 end
 
